@@ -2,13 +2,23 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { auth, db } from './firebase';
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut, User } from 'firebase/auth';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
-import * as XLSX from 'xlsx';
-import { UploadCloud, FileText, CheckCircle, XCircle, LogOut, Download, ChevronRight, ChevronLeft } from 'lucide-react';
-import { CNPJ_DB, validateCNPJ, validateCPF, formatCNPJ, formatCPF, formatCurrency } from './utils';
+import { UploadCloud, FileText, CheckCircle, XCircle, LogOut, Download, ChevronRight, ChevronLeft, FileSpreadsheet, Building2, Users } from 'lucide-react';
+import { CNPJ_DB, validateCNPJ, validateCPF, formatCNPJ, formatCPF, formatCurrency, applyCnpjMask } from './utils';
 import { FontePagadora, Beneficiario } from './types';
-import { generatePDF } from './pdfGenerator';
+import { generatePDF, generateConsolidatedPDF } from './pdfGenerator';
 
-function App() {
+function loadSheetJS(): Promise<void> {
+  if ((window as any).XLSX) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+    s.onload = () => resolve();
+    s.onerror = () => reject(new Error('Falha CDN SheetJS'));
+    document.head.appendChild(s);
+  });
+}
+
+export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -16,14 +26,22 @@ function App() {
   const [authError, setAuthError] = useState('');
 
   const [step, setStep] = useState(1);
-  const [fontePagadora, setFontePagadora] = useState<FontePagadora | null>(null);
+  
+  // Step 1 State
   const [cnpjInput, setCnpjInput] = useState('');
-  const [cnpjError, setCnpjError] = useState('');
+  const [razaoSocial, setRazaoSocial] = useState('');
+  const [responsavel, setResponsavel] = useState('');
+  const [exercicio, setExercicio] = useState('2026');
+  const [anoCalendario, setAnoCalendario] = useState('2025');
+  const [cnpjStatus, setCnpjStatus] = useState<'idle' | 'loading' | 'valid' | 'invalid'>('idle');
+  const [cnpjErrorMsg, setCnpjErrorMsg] = useState('');
 
+  // Step 2 State
   const [beneficiarios, setBeneficiarios] = useState<Beneficiario[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const [fileError, setFileError] = useState('');
 
+  // Step 3 State
   const [isGenerating, setIsGenerating] = useState(false);
 
   useEffect(() => {
@@ -50,53 +68,81 @@ function App() {
   const handleLogout = async () => {
     await signOut(auth);
     setStep(1);
-    setFontePagadora(null);
     setBeneficiarios([]);
+    setCnpjInput('');
+    setRazaoSocial('');
+    setResponsavel('');
+    setCnpjStatus('idle');
   };
 
-  const handleCnpjSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setCnpjError('');
-    const cleanCnpj = cnpjInput.replace(/[^\d]+/g, '');
+  const handleCnpjChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const masked = applyCnpjMask(e.target.value);
+    setCnpjInput(masked);
     
-    if (!validateCNPJ(cleanCnpj)) {
-      setCnpjError('CNPJ inválido (Dígito Verificador incorreto).');
-      return;
-    }
-
-    const dbRecord = CNPJ_DB[cleanCnpj];
-    if (dbRecord) {
-      setFontePagadora({
-        cnpj: cleanCnpj,
-        razaoSocial: dbRecord.razao_social
-      });
-      setStep(2);
+    const cleanCnpj = masked.replace(/[^\d]+/g, '');
+    if (cleanCnpj.length === 14) {
+      if (!validateCNPJ(cleanCnpj)) {
+        setCnpjStatus('invalid');
+        setCnpjErrorMsg('Dígito verificador incorreto');
+        setRazaoSocial('');
+        return;
+      }
+      
+      setCnpjStatus('loading');
+      try {
+        const res = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${cleanCnpj}`);
+        if (res.ok) {
+          const data = await res.json();
+          setRazaoSocial(data.razao_social);
+          setCnpjStatus('valid');
+          setCnpjErrorMsg('');
+        } else {
+          throw new Error('API falhou');
+        }
+      } catch (err) {
+        // Fallback
+        const dbRecord = CNPJ_DB[cleanCnpj];
+        if (dbRecord) {
+          setRazaoSocial(dbRecord.razao_social);
+          setCnpjStatus('valid');
+          setCnpjErrorMsg('');
+        } else {
+          setCnpjStatus('invalid');
+          setCnpjErrorMsg('CNPJ não encontrado');
+          setRazaoSocial('');
+        }
+      }
     } else {
-      setCnpjError('CNPJ não encontrado no banco de dados interno.');
+      setCnpjStatus('idle');
+      setCnpjErrorMsg('');
+      setRazaoSocial('');
     }
   };
 
-  const onDragOver = (e: React.DragEvent) => {
+  const handleStep1Submit = (e: React.FormEvent) => {
     e.preventDefault();
-    setIsDragging(true);
+    if (cnpjStatus === 'valid' && razaoSocial && responsavel) {
+      setStep(2);
+    }
   };
 
-  const onDragLeave = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-  };
+  const getFontePagadora = (): FontePagadora => ({
+    cnpj: cnpjInput.replace(/[^\d]+/g, ''),
+    razaoSocial,
+    responsavel,
+    exercicio,
+    anoCalendario
+  });
 
   const processExcel = (data: any[]) => {
-    // Expected Columns: Localidade, CNPJ fonte, Código, Nome Proprietário, CPF Proprietário, Apuração (data), Bruto, IRRF, Líquido
     const benesMap = new Map<string, Beneficiario>();
 
     data.forEach(row => {
-      // Skip header rows or empty rows
       if (!row || !row[3] || String(row[3]).includes('Nome') || String(row[3]).includes('Proprietário')) return;
 
       const nome = String(row[3]).trim().toUpperCase();
       const cpfRaw = String(row[4] || '').replace(/[^\d]+/g, '');
-      const apuracao = row[5]; // Date or string
+      const apuracao = row[5];
       const bruto = parseFloat(String(row[6]).replace(',', '.')) || 0;
       const irrf = parseFloat(String(row[7]).replace(',', '.')) || 0;
 
@@ -104,7 +150,6 @@ function App() {
 
       let month = 0;
       if (typeof apuracao === 'number') {
-        // Excel date
         const date = new Date(Math.round((apuracao - 25569) * 86400 * 1000));
         month = date.getUTCMonth();
       } else if (typeof apuracao === 'string') {
@@ -118,7 +163,7 @@ function App() {
 
       if (!benesMap.has(nome)) {
         benesMap.set(nome, {
-          cpf: cpfRaw, // Use first CPF found for this name
+          cpf: cpfRaw,
           nome: nome,
           rendimentos: new Array(12).fill(0),
           irrf: new Array(12).fill(0),
@@ -138,141 +183,139 @@ function App() {
     setStep(3);
   };
 
-  const onDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
+  const handleFile = async (file: File) => {
     setFileError('');
-
-    const files = e.dataTransfer.files;
-    if (files.length === 0) return;
-    const file = files[0];
-
     if (!file.name.endsWith('.xlsx') && !file.name.endsWith('.xls')) {
       setFileError('Por favor, envie um arquivo Excel (.xlsx ou .xls).');
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = (evt) => {
-      try {
-        const bstr = evt.target?.result;
-        const wb = XLSX.read(bstr, { type: 'binary' });
-        const wsname = wb.SheetNames[0];
-        const ws = wb.Sheets[wsname];
-        const data = XLSX.utils.sheet_to_json(ws, { header: 1 });
-        processExcel(data);
-      } catch (err) {
-        setFileError('Erro ao processar o arquivo Excel.');
-      }
-    };
-    reader.readAsBinaryString(file);
-  }, []);
-
-  const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFileError('');
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
-    const file = files[0];
-
-    const reader = new FileReader();
-    reader.onload = (evt) => {
-      try {
-        const bstr = evt.target?.result;
-        const wb = XLSX.read(bstr, { type: 'binary' });
-        const wsname = wb.SheetNames[0];
-        const ws = wb.Sheets[wsname];
-        const data = XLSX.utils.sheet_to_json(ws, { header: 1 });
-        processExcel(data);
-      } catch (err) {
-        setFileError('Erro ao processar o arquivo Excel.');
-      }
-    };
-    reader.readAsBinaryString(file);
+    try {
+      await loadSheetJS();
+      const reader = new FileReader();
+      reader.onload = (evt) => {
+        try {
+          const bstr = evt.target?.result;
+          const wb = (window as any).XLSX.read(bstr, { type: 'binary' });
+          const wsname = wb.SheetNames[0];
+          const ws = wb.Sheets[wsname];
+          const data = (window as any).XLSX.utils.sheet_to_json(ws, { header: 1 });
+          processExcel(data);
+        } catch (err) {
+          setFileError('Erro ao processar o arquivo Excel.');
+        }
+      };
+      reader.readAsBinaryString(file);
+    } catch (err) {
+      setFileError('Erro ao carregar biblioteca Excel.');
+    }
   };
 
-  const handleGeneratePDF = async (beneficiario: Beneficiario) => {
-    if (!fontePagadora || !user) return;
-    
+  const onDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    if (e.dataTransfer.files.length > 0) {
+      handleFile(e.dataTransfer.files[0]);
+    }
+  }, []);
+
+  const handleGenerateIndividual = async (beneficiario: Beneficiario) => {
+    if (!user) return;
     try {
-      const blob = await generatePDF(fontePagadora, beneficiario);
+      const blob = await generatePDF(getFontePagadora(), beneficiario);
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `Informe_Rendimentos_${beneficiario.cpf}_${beneficiario.nome}.pdf`;
+      a.download = `Informe_${beneficiario.cpf}_${beneficiario.nome}.pdf`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
 
-      // Log to Firestore
       await addDoc(collection(db, 'pdf_logs'), {
         userId: user.uid,
         userEmail: user.email,
-        fontePagadoraCnpj: fontePagadora.cnpj,
+        fontePagadoraCnpj: getFontePagadora().cnpj,
         beneficiarioCpf: beneficiario.cpf,
         beneficiarioNome: beneficiario.nome,
-        timestamp: serverTimestamp()
+        timestamp: serverTimestamp(),
+        type: 'individual'
       });
-    } catch (err) {
-      console.error("Erro ao gerar PDF:", err);
-      alert("Erro ao gerar PDF.");
+    } catch (err: any) {
+      console.error('Erro detalhado:', err);
+      alert('Erro: ' + err.message);
     }
   };
 
-  const handleGenerateAll = async () => {
-    if (!fontePagadora || !user) return;
+  const handleGenerateConsolidated = async () => {
+    if (!user || beneficiarios.length === 0) return;
     setIsGenerating(true);
-    
-    for (const b of beneficiarios) {
-      await handleGeneratePDF(b);
-      // Small delay to prevent browser from blocking multiple downloads
-      await new Promise(resolve => setTimeout(resolve, 500));
+    try {
+      const blob = await generateConsolidatedPDF(getFontePagadora(), beneficiarios);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Informes_Consolidados_${getFontePagadora().cnpj}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      await addDoc(collection(db, 'pdf_logs'), {
+        userId: user.uid,
+        userEmail: user.email,
+        fontePagadoraCnpj: getFontePagadora().cnpj,
+        count: beneficiarios.length,
+        timestamp: serverTimestamp(),
+        type: 'consolidated'
+      });
+    } catch (err: any) {
+      console.error('Erro detalhado:', err);
+      alert('Erro: ' + err.message);
     }
-    
     setIsGenerating(false);
   };
 
   if (!user) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-[#0d1b2a] via-[#1b2a4a] to-[#1a3a5c] flex items-center justify-center p-4">
-        <div className="bg-white/10 backdrop-blur-md border border-white/20 p-8 rounded-2xl shadow-2xl w-full max-w-md">
+      <div className="min-h-screen flex items-center justify-center p-4">
+        <div className="glass-card p-8 w-full max-w-md">
+          <div className="flex justify-center mb-6">
+            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#2a7fff] to-[#1a5cbf] flex items-center justify-center text-xl font-bold shadow-lg">
+              IR
+            </div>
+          </div>
           <h2 className="text-2xl font-bold text-white mb-6 text-center">
             {isLogin ? 'Login' : 'Cadastro'}
           </h2>
-          {authError && <div className="bg-red-500/20 border border-red-500/50 text-red-200 p-3 rounded-lg mb-4 text-sm">{authError}</div>}
+          {authError && <div className="bg-[#ff6b6b]/20 border border-[#ff6b6b]/50 text-[#ff6b6b] p-3 rounded-lg mb-4 text-sm">{authError}</div>}
           <form onSubmit={handleAuth} className="space-y-4">
             <div>
-              <label className="block text-gray-300 text-sm mb-1">E-mail</label>
+              <label className="label-text">E-mail</label>
               <input 
                 type="email" 
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full bg-black/20 border border-white/10 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-blue-500"
+                className="input-field"
                 required
               />
             </div>
             <div>
-              <label className="block text-gray-300 text-sm mb-1">Senha</label>
+              <label className="label-text">Senha</label>
               <input 
                 type="password" 
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full bg-black/20 border border-white/10 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-blue-500"
+                className="input-field"
                 required
               />
             </div>
-            <button 
-              type="submit"
-              className="w-full bg-gradient-to-r from-[#2a7fff] to-[#1a5cbf] hover:from-[#3a8fff] hover:to-[#2a6ccf] text-white font-medium py-2 rounded-lg transition-all shadow-lg"
-            >
+            <button type="submit" className="btn-primary w-full py-2.5 mt-2 font-medium">
               {isLogin ? 'Entrar' : 'Cadastrar'}
             </button>
           </form>
           <div className="mt-4 text-center">
-            <button 
-              onClick={() => setIsLogin(!isLogin)}
-              className="text-blue-300 hover:text-blue-200 text-sm transition-colors"
-            >
+            <button onClick={() => setIsLogin(!isLogin)} className="text-[#7a8fa6] hover:text-white text-sm transition-colors">
               {isLogin ? 'Não tem conta? Cadastre-se' : 'Já tem conta? Faça login'}
             </button>
           </div>
@@ -281,169 +324,230 @@ function App() {
     );
   }
 
+  const totalRendimentos = beneficiarios.reduce((acc, b) => acc + b.totalRendimentos, 0);
+  const totalIrrf = beneficiarios.reduce((acc, b) => acc + b.totalIrrf, 0);
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#0d1b2a] via-[#1b2a4a] to-[#1a3a5c] text-white p-6">
-      <header className="max-w-6xl mx-auto flex justify-between items-center mb-10">
-        <div>
-          <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-blue-200">
-            Gerador de Informes
-          </h1>
-          <p className="text-blue-200/60 text-sm">Natureza 13002 - Aluguéis PF</p>
+    <div className="min-h-screen p-6">
+      <header className="max-w-5xl mx-auto flex justify-between items-center mb-10">
+        <div className="flex items-center gap-4">
+          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#2a7fff] to-[#1a5cbf] flex items-center justify-center text-xl font-bold shadow-lg">
+            IR
+          </div>
+          <div>
+            <h1 className="text-xl font-bold text-white">Gerador de Informe de Rendimentos</h1>
+            <p className="text-[#7a8fa6] text-sm">Natureza 13002 · Aluguel PF · IN RFB 2.060/2021</p>
+          </div>
         </div>
         <div className="flex items-center gap-4">
-          <span className="text-sm text-gray-300">{user.email}</span>
-          <button 
-            onClick={handleLogout}
-            className="flex items-center gap-2 bg-white/5 hover:bg-white/10 border border-white/10 px-3 py-1.5 rounded-lg transition-colors text-sm"
-          >
+          <span className="text-sm text-[#7a8fa6]">{user.email}</span>
+          <button onClick={handleLogout} className="flex items-center gap-2 glass-card px-3 py-1.5 hover:bg-white/10 transition-colors text-sm">
             <LogOut size={16} /> Sair
           </button>
         </div>
       </header>
 
-      <main className="max-w-6xl mx-auto">
-        {/* Progress Steps */}
-        <div className="flex items-center justify-center mb-12">
-          {[1, 2, 3].map((s) => (
-            <React.Fragment key={s}>
-              <div className={`flex items-center justify-center w-10 h-10 rounded-full border-2 ${step >= s ? 'border-blue-500 bg-blue-500/20 text-blue-400' : 'border-white/20 text-white/40'}`}>
-                {s}
+      <main className="max-w-5xl mx-auto">
+        {/* Steps */}
+        <div className="flex items-center justify-center gap-4 mb-10">
+          {[
+            { num: 1, label: 'Fonte Pagadora', icon: Building2 },
+            { num: 2, label: 'Importar Excel', icon: FileSpreadsheet },
+            { num: 3, label: 'Gerar PDFs', icon: Users }
+          ].map((s) => (
+            <div key={s.num} className="flex items-center gap-3">
+              <div className={`flex items-center gap-2 px-4 py-2 rounded-full border ${step >= s.num ? 'border-[#2a7fff] bg-[#2a7fff]/10 text-white' : 'border-white/10 text-[#7a8fa6]'}`}>
+                <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${step >= s.num ? 'bg-[#2a7fff] text-white' : 'bg-white/10'}`}>
+                  {s.num}
+                </div>
+                <span className="text-sm font-medium">{s.label}</span>
               </div>
-              {s < 3 && (
-                <div className={`w-24 h-1 mx-2 rounded ${step > s ? 'bg-blue-500' : 'bg-white/10'}`} />
-              )}
-            </React.Fragment>
+              {s.num < 3 && <div className="w-8 h-[1px] bg-white/10" />}
+            </div>
           ))}
         </div>
 
-        {/* Step 1: Fonte Pagadora */}
+        {/* Step 1 */}
         {step === 1 && (
-          <div className="bg-white/5 backdrop-blur-md border border-white/10 p-8 rounded-2xl shadow-2xl max-w-xl mx-auto">
-            <h2 className="text-xl font-semibold mb-6 flex items-center gap-2">
-              <FileText className="text-blue-400" /> Dados da Fonte Pagadora
-            </h2>
-            <form onSubmit={handleCnpjSubmit} className="space-y-4">
-              <div>
-                <label className="block text-gray-300 text-sm mb-2">CNPJ da Fonte Pagadora</label>
-                <input 
-                  type="text" 
-                  value={cnpjInput}
-                  onChange={(e) => setCnpjInput(e.target.value)}
-                  placeholder="00.000.000/0000-00"
-                  className="w-full bg-black/20 border border-white/10 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-blue-500 font-mono"
-                  required
-                />
-                {cnpjError && <p className="text-red-400 text-sm mt-2 flex items-center gap-1"><XCircle size={14} /> {cnpjError}</p>}
+          <div className="glass-card p-8 max-w-2xl mx-auto">
+            <form onSubmit={handleStep1Submit} className="space-y-5">
+              <div className="grid grid-cols-2 gap-5">
+                <div className="col-span-2">
+                  <label className="label-text">CNPJ da Fonte Pagadora</label>
+                  <div className="relative">
+                    <input 
+                      type="text" 
+                      value={cnpjInput}
+                      onChange={handleCnpjChange}
+                      placeholder="00.000.000/0000-00"
+                      className="input-field font-mono text-lg py-3"
+                      maxLength={18}
+                      required
+                    />
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                      {cnpjStatus === 'loading' && <div className="animate-spin w-5 h-5 border-2 border-[#2a7fff] border-t-transparent rounded-full" />}
+                      {cnpjStatus === 'valid' && <span className="flex items-center gap-1 text-[#2ac864] text-sm font-medium bg-[#2ac864]/10 px-2 py-1 rounded"><CheckCircle size={14} /> Válido</span>}
+                      {cnpjStatus === 'invalid' && <span className="flex items-center gap-1 text-[#ff6b6b] text-sm font-medium bg-[#ff6b6b]/10 px-2 py-1 rounded"><XCircle size={14} /> {cnpjErrorMsg}</span>}
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="col-span-2">
+                  <label className="label-text">Razão Social</label>
+                  <input 
+                    type="text" 
+                    value={razaoSocial}
+                    readOnly
+                    className="input-field bg-black/40 text-gray-300"
+                    placeholder="Preenchimento automático"
+                    required
+                  />
+                </div>
+
+                <div className="col-span-2">
+                  <label className="label-text">Responsável pelas Informações</label>
+                  <input 
+                    type="text" 
+                    value={responsavel}
+                    onChange={(e) => setResponsavel(e.target.value)}
+                    className="input-field"
+                    placeholder="Nome do responsável"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="label-text">Ano-Calendário</label>
+                  <input 
+                    type="text" 
+                    value={anoCalendario}
+                    onChange={(e) => setAnoCalendario(e.target.value)}
+                    className="input-field"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="label-text">Exercício</label>
+                  <input 
+                    type="text" 
+                    value={exercicio}
+                    onChange={(e) => setExercicio(e.target.value)}
+                    className="input-field"
+                    required
+                  />
+                </div>
               </div>
-              <button 
-                type="submit"
-                className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-[#2a7fff] to-[#1a5cbf] hover:from-[#3a8fff] hover:to-[#2a6ccf] text-white font-medium py-3 rounded-lg transition-all shadow-lg mt-4"
-              >
-                Validar e Continuar <ChevronRight size={18} />
-              </button>
+
+              <div className="pt-4 flex justify-end">
+                <button 
+                  type="submit"
+                  disabled={cnpjStatus !== 'valid' || !responsavel}
+                  className="btn-primary px-8 py-3 flex items-center gap-2 font-medium"
+                >
+                  Continuar <ChevronRight size={18} />
+                </button>
+              </div>
             </form>
           </div>
         )}
 
-        {/* Step 2: Importar Excel */}
+        {/* Step 2 */}
         {step === 2 && (
-          <div className="bg-white/5 backdrop-blur-md border border-white/10 p-8 rounded-2xl shadow-2xl max-w-2xl mx-auto">
+          <div className="glass-card p-8 max-w-2xl mx-auto">
             <div className="flex justify-between items-center mb-6">
-              <h2 className="text-xl font-semibold flex items-center gap-2">
-                <UploadCloud className="text-blue-400" /> Importar Planilha
-              </h2>
-              <button onClick={() => setStep(1)} className="text-sm text-blue-300 hover:text-blue-200 flex items-center gap-1">
+              <h2 className="text-lg font-semibold text-white">Importar Planilha</h2>
+              <button onClick={() => setStep(1)} className="text-sm text-[#7a8fa6] hover:text-white flex items-center gap-1">
                 <ChevronLeft size={16} /> Voltar
               </button>
             </div>
             
-            <div className="mb-6 p-4 bg-blue-900/20 border border-blue-500/30 rounded-lg">
-              <p className="text-sm text-blue-200">
-                <span className="font-bold text-white">Fonte Pagadora:</span> {fontePagadora?.razaoSocial} ({formatCNPJ(fontePagadora?.cnpj || '')})
-              </p>
-            </div>
-
             <div 
-              onDragOver={onDragOver}
-              onDragLeave={onDragLeave}
+              onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+              onDragLeave={(e) => { e.preventDefault(); setIsDragging(false); }}
               onDrop={onDrop}
-              className={`border-2 border-dashed rounded-xl p-12 text-center transition-all ${isDragging ? 'border-blue-500 bg-blue-500/10' : 'border-white/20 hover:border-white/40 bg-black/10'}`}
+              className={`border-2 border-dashed rounded-xl p-12 text-center transition-all ${isDragging ? 'border-[#2a7fff] bg-[#2a7fff]/10' : 'border-[#2a7fff]/30 hover:border-[#2a7fff]/60 bg-black/20'}`}
             >
-              <UploadCloud size={48} className={`mx-auto mb-4 ${isDragging ? 'text-blue-400' : 'text-gray-400'}`} />
-              <p className="text-lg mb-2">Arraste e solte sua planilha Excel aqui</p>
-              <p className="text-sm text-gray-400 mb-6">ou clique para selecionar o arquivo (.xlsx, .xls)</p>
+              <FileSpreadsheet size={48} className={`mx-auto mb-4 ${isDragging ? 'text-[#2a7fff]' : 'text-[#7a8fa6]'}`} />
+              <p className="text-lg font-medium text-white mb-2">Arraste o arquivo Excel aqui</p>
+              <p className="text-sm text-[#7a8fa6] mb-6">ou clique para selecionar (.xlsx, .xls)</p>
               
-              <label className="cursor-pointer bg-white/10 hover:bg-white/20 border border-white/20 px-6 py-2 rounded-lg transition-colors inline-block">
+              <label className="cursor-pointer glass-card hover:bg-white/10 px-6 py-2.5 rounded-lg transition-colors inline-block text-sm font-medium text-white">
                 Selecionar Arquivo
-                <input type="file" accept=".xlsx, .xls" className="hidden" onChange={handleFileInput} />
+                <input type="file" accept=".xlsx, .xls" className="hidden" onChange={(e) => e.target.files && handleFile(e.target.files[0])} />
               </label>
             </div>
-            {fileError && <p className="text-red-400 text-sm mt-4 text-center flex items-center justify-center gap-1"><XCircle size={14} /> {fileError}</p>}
+            {fileError && <p className="text-[#ff6b6b] text-sm mt-4 text-center flex items-center justify-center gap-1"><XCircle size={14} /> {fileError}</p>}
           </div>
         )}
 
-        {/* Step 3: Gerar PDFs */}
+        {/* Step 3 */}
         {step === 3 && (
-          <div className="bg-white/5 backdrop-blur-md border border-white/10 p-6 rounded-2xl shadow-2xl">
-            <div className="flex justify-between items-center mb-6">
-              <div>
-                <h2 className="text-xl font-semibold flex items-center gap-2">
-                  <CheckCircle className="text-green-400" /> Beneficiários Processados
-                </h2>
-                <p className="text-sm text-gray-400 mt-1">{beneficiarios.length} registros encontrados</p>
+          <div className="space-y-6">
+            <div className="flex justify-between items-center">
+              <button onClick={() => setStep(2)} className="text-sm text-[#7a8fa6] hover:text-white flex items-center gap-1">
+                <ChevronLeft size={16} /> Voltar
+              </button>
+              <button 
+                onClick={handleGenerateConsolidated}
+                disabled={isGenerating}
+                className="btn-primary px-6 py-2.5 flex items-center gap-2 font-medium"
+              >
+                <FileText size={18} /> 
+                {isGenerating ? 'Gerando...' : `Gerar PDF Consolidado (${beneficiarios.length} informes)`}
+              </button>
+            </div>
+
+            <div className="grid grid-cols-3 gap-4">
+              <div className="glass-card p-5">
+                <span className="label-text">Fonte Pagadora</span>
+                <p className="text-white font-medium truncate">{razaoSocial}</p>
+                <p className="text-sm text-[#7a8fa6] font-mono mt-1">{cnpjInput}</p>
               </div>
-              <div className="flex gap-3">
-                <button onClick={() => setStep(2)} className="px-4 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg transition-colors text-sm flex items-center gap-2">
-                  <ChevronLeft size={16} /> Voltar
-                </button>
-                <button 
-                  onClick={handleGenerateAll}
-                  disabled={isGenerating}
-                  className="px-4 py-2 bg-gradient-to-r from-[#2a7fff] to-[#1a5cbf] hover:from-[#3a8fff] hover:to-[#2a6ccf] disabled:opacity-50 text-white rounded-lg transition-all shadow-lg text-sm flex items-center gap-2"
-                >
-                  <Download size={16} /> {isGenerating ? 'Gerando...' : 'Baixar Todos'}
-                </button>
+              <div className="glass-card p-5">
+                <span className="label-text">Total Rendimentos</span>
+                <p className="text-2xl font-bold text-[#2a7fff]">{formatCurrency(totalRendimentos)}</p>
+              </div>
+              <div className="glass-card p-5">
+                <span className="label-text">Total IRRF</span>
+                <p className="text-2xl font-bold text-[#ff8c42]">{formatCurrency(totalIrrf)}</p>
               </div>
             </div>
 
-            <div className="overflow-x-auto">
+            <div className="glass-card overflow-hidden">
               <table className="w-full text-left border-collapse">
                 <thead>
-                  <tr className="border-b border-white/10 text-sm text-gray-400">
-                    <th className="pb-3 pl-4 font-medium">Beneficiário</th>
-                    <th className="pb-3 font-medium">CPF</th>
-                    <th className="pb-3 font-medium text-right">Rendimentos</th>
-                    <th className="pb-3 font-medium text-right">IRRF</th>
-                    <th className="pb-3 font-medium text-center">Status CPF</th>
-                    <th className="pb-3 pr-4 font-medium text-right">Ação</th>
+                  <tr className="border-b border-white/5 bg-black/20">
+                    <th className="py-3 pl-5 text-xs font-medium text-[#7a8fa6] uppercase tracking-wider">Beneficiário</th>
+                    <th className="py-3 text-xs font-medium text-[#7a8fa6] uppercase tracking-wider">CPF</th>
+                    <th className="py-3 text-xs font-medium text-[#7a8fa6] uppercase tracking-wider text-right">Rendimentos</th>
+                    <th className="py-3 text-xs font-medium text-[#7a8fa6] uppercase tracking-wider text-right">IRRF</th>
+                    <th className="py-3 pr-5 text-xs font-medium text-[#7a8fa6] uppercase tracking-wider text-right">Ação</th>
                   </tr>
                 </thead>
-                <tbody className="text-sm">
+                <tbody className="text-sm divide-y divide-white/5">
                   {beneficiarios.map((b, idx) => {
                     const cpfValido = validateCPF(b.cpf);
                     return (
-                      <tr key={idx} className="border-b border-white/5 hover:bg-white/5 transition-colors">
-                        <td className="py-4 pl-4 font-medium">{b.nome}</td>
-                        <td className="py-4 font-mono text-gray-300">{formatCPF(b.cpf)}</td>
-                        <td className="py-4 text-right">{formatCurrency(b.totalRendimentos)}</td>
-                        <td className="py-4 text-right text-[#ff8c42] font-medium">{formatCurrency(b.totalIrrf)}</td>
-                        <td className="py-4 text-center">
-                          {cpfValido ? (
-                            <span className="inline-flex items-center gap-1 bg-green-500/20 text-green-300 px-2 py-1 rounded text-xs border border-green-500/30">
-                              <CheckCircle size={12} /> Válido
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 bg-red-500/20 text-red-300 px-2 py-1 rounded text-xs border border-red-500/30">
-                              <XCircle size={12} /> Inválido
-                            </span>
-                          )}
+                      <tr key={idx} className="hover:bg-white/5 transition-colors">
+                        <td className="py-3 pl-5 font-medium text-white">{b.nome}</td>
+                        <td className="py-3">
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono text-[#7a8fa6]">{formatCPF(b.cpf)}</span>
+                            {cpfValido ? (
+                              <span className="text-[#2ac864] bg-[#2ac864]/10 px-1.5 py-0.5 rounded text-[10px] font-bold flex items-center gap-1"><CheckCircle size={10} /> VÁLIDO</span>
+                            ) : (
+                              <span className="text-[#ff6b6b] bg-[#ff6b6b]/10 px-1.5 py-0.5 rounded text-[10px] font-bold flex items-center gap-1"><XCircle size={10} /> INVÁLIDO</span>
+                            )}
+                          </div>
                         </td>
-                        <td className="py-4 pr-4 text-right">
+                        <td className="py-3 text-right text-white">{formatCurrency(b.totalRendimentos)}</td>
+                        <td className="py-3 text-right text-[#ff8c42] font-medium">{formatCurrency(b.totalIrrf)}</td>
+                        <td className="py-3 pr-5 text-right">
                           <button 
-                            onClick={() => handleGeneratePDF(b)}
-                            className="inline-flex items-center gap-1 bg-white/10 hover:bg-white/20 border border-white/20 px-3 py-1.5 rounded transition-colors text-xs"
+                            onClick={() => handleGenerateIndividual(b)}
+                            className="inline-flex items-center gap-1.5 glass-card hover:bg-white/10 px-3 py-1.5 rounded text-xs font-medium text-white transition-colors"
                           >
-                            <Download size={14} /> PDF
+                            <FileText size={14} /> Gerar PDF
                           </button>
                         </td>
                       </tr>
@@ -458,6 +562,4 @@ function App() {
     </div>
   );
 }
-
-export default App;
 

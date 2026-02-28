@@ -1,6 +1,9 @@
 export interface FontePagadora {
   cnpj: string;
   razaoSocial: string;
+  responsavel: string;
+  exercicio: string;
+  anoCalendario: string;
 }
 
 export interface Beneficiario {

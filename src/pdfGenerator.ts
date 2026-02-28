@@ -1,29 +1,29 @@
 import { Beneficiario, FontePagadora } from "./types";
 import { formatCNPJ, formatCPF, formatCurrency } from "./utils";
 
-function loadScript(url: string): Promise<void> {
-  if ((window as any).jspdf) return Promise.resolve();
+async function carregarJsPDF(): Promise<any> {
+  if ((window as any).jspdf) return (window as any).jspdf.jsPDF;
   return new Promise((resolve, reject) => {
-    const s = document.createElement('script');
-    s.src = url;
-    s.onload = () => resolve();
-    s.onerror = () => reject(new Error('Falha CDN'));
-    document.head.appendChild(s);
+    const script = document.createElement('script');
+    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.2/jspdf.umd.min.js';
+    script.onload = () => {
+      if ((window as any).jspdf && (window as any).jspdf.jsPDF) {
+        resolve((window as any).jspdf.jsPDF);
+      } else {
+        reject(new Error('jsPDF não carregou'));
+      }
+    };
+    script.onerror = () => reject(new Error('Falha ao carregar CDN'));
+    document.head.appendChild(script);
   });
 }
 
-export async function generatePDF(fonte: FontePagadora, beneficiario: Beneficiario, anoCalendario: string = "2023", anoExercicio: string = "2024"): Promise<Blob> {
-  await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.2/jspdf.umd.min.js');
-  const { jsPDF } = (window as any).jspdf;
-  
-  const doc = new jsPDF();
-  
+function renderPage(doc: any, fonte: FontePagadora, beneficiario: Beneficiario) {
   const blueDark = [26, 39, 68];
   const blueLight = [43, 76, 126];
   const bgLight = [220, 230, 240];
   const bgGray = [245, 245, 245];
 
-  // Configurações iniciais
   doc.setFont("helvetica");
   
   // Header
@@ -40,10 +40,8 @@ export async function generatePDF(fonte: FontePagadora, beneficiario: Beneficiar
   doc.setFont("helvetica", "normal");
   doc.text("IN RFB nº 2.060/2021", 105, 28, { align: "center" });
 
-  // Reset text color
   doc.setTextColor(0, 0, 0);
 
-  // Helper function for sections
   const drawSection = (y: number, title: string, height: number) => {
     doc.setFillColor(blueLight[0], blueLight[1], blueLight[2]);
     doc.rect(10, y, 190, 6, "F");
@@ -57,7 +55,6 @@ export async function generatePDF(fonte: FontePagadora, beneficiario: Beneficiar
     doc.setTextColor(0, 0, 0);
   };
 
-  // Seção 1: Fonte Pagadora
   let currentY = 35;
   drawSection(currentY, "1. FONTE PAGADORA", 10);
   doc.setFontSize(7);
@@ -71,7 +68,6 @@ export async function generatePDF(fonte: FontePagadora, beneficiario: Beneficiar
   doc.setFont("helvetica", "bold");
   doc.text(fonte.razaoSocial, 85, currentY + 10);
 
-  // Seção 2: Beneficiário
   currentY += 20;
   drawSection(currentY, "2. PESSOA FÍSICA BENEFICIÁRIA DOS RENDIMENTOS", 10);
   doc.setFontSize(7);
@@ -90,7 +86,6 @@ export async function generatePDF(fonte: FontePagadora, beneficiario: Beneficiar
   doc.setFont("helvetica", "bold");
   doc.text("13002 - Aluguéis PF", 170, currentY + 10);
 
-  // Seção 3: Rendimentos Tributáveis
   currentY += 20;
   drawSection(currentY, "3. RENDIMENTOS TRIBUTÁVEIS, DEDUÇÕES E IMPOSTO SOBRE A RENDA RETIDO NA FONTE", 30);
   
@@ -110,7 +105,6 @@ export async function generatePDF(fonte: FontePagadora, beneficiario: Beneficiar
   drawLine(currentY + 25, "4. Pensão alimentícia", "R$ 0,00");
   drawLine(currentY + 30, "5. Imposto sobre a renda retido na fonte", formatCurrency(beneficiario.totalIrrf));
 
-  // Seção 4: Rendimentos Isentos
   currentY += 40;
   drawSection(currentY, "4. RENDIMENTOS ISENTOS E NÃO TRIBUTÁVEIS", 40);
   drawLine(currentY + 10, "1. Parcela isenta dos proventos de aposentadoria, reserva remunerada, reforma e pensão (65 anos ou mais)", "R$ 0,00");
@@ -121,13 +115,11 @@ export async function generatePDF(fonte: FontePagadora, beneficiario: Beneficiar
   drawLine(currentY + 35, "6. Indenizações por rescisão de contrato de trabalho, inclusive a título de PDV, e por acidentes de trabalho", "R$ 0,00");
   drawLine(currentY + 40, "7. Outros", "R$ 0,00");
 
-  // Seção 5: Rendimentos Sujeitos à Tributação Exclusiva
   currentY += 50;
   drawSection(currentY, "5. RENDIMENTOS SUJEITOS À TRIBUTAÇÃO EXCLUSIVA (RENDIMENTO LÍQUIDO)", 15);
   drawLine(currentY + 10, "1. Décimo terceiro salário", "R$ 0,00");
   drawLine(currentY + 15, "2. Outros", "R$ 0,00");
 
-  // Seção 7: Informações Complementares (Tabela Mensal)
   currentY += 25;
   drawSection(currentY, "7. INFORMAÇÕES COMPLEMENTARES", 50);
   
@@ -146,29 +138,43 @@ export async function generatePDF(fonte: FontePagadora, beneficiario: Beneficiar
   doc.setFont("helvetica", "normal");
   for (let i = 0; i < 6; i++) {
     const y = currentY + 15 + (i * 5);
-    // Left column (0-5)
     doc.text(meses[i], 15, y);
     doc.text(formatCurrency(beneficiario.rendimentos[i]), 65, y, { align: "right" });
     doc.text(formatCurrency(beneficiario.irrf[i]), 95, y, { align: "right" });
     
-    // Right column (6-11)
     doc.text(meses[i + 6], 115, y);
     doc.text(formatCurrency(beneficiario.rendimentos[i + 6]), 165, y, { align: "right" });
     doc.text(formatCurrency(beneficiario.irrf[i + 6]), 195, y, { align: "right" });
   }
 
-  // Rodapé
   currentY += 60;
   doc.setFontSize(7);
   doc.setFont("helvetica", "normal");
   doc.text("RESPONSÁVEL PELAS INFORMAÇÕES:", 10, currentY);
   doc.setFont("helvetica", "bold");
-  doc.text(fonte.razaoSocial, 65, currentY);
+  doc.text(fonte.responsavel || fonte.razaoSocial, 65, currentY);
   
   doc.setFont("helvetica", "normal");
   doc.text("DATA:", 150, currentY);
   const today = new Date();
   doc.text(`${today.getDate().toString().padStart(2, '0')}/${(today.getMonth() + 1).toString().padStart(2, '0')}/${today.getFullYear()}`, 160, currentY);
+}
 
+export async function generatePDF(fonte: FontePagadora, beneficiario: Beneficiario): Promise<Blob> {
+  const jsPDF = await carregarJsPDF();
+  const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+  renderPage(doc, fonte, beneficiario);
+  return doc.output("blob");
+}
+
+export async function generateConsolidatedPDF(fonte: FontePagadora, beneficiarios: Beneficiario[]): Promise<Blob> {
+  const jsPDF = await carregarJsPDF();
+  const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+  
+  for (let i = 0; i < beneficiarios.length; i++) {
+    if (i > 0) doc.addPage();
+    renderPage(doc, fonte, beneficiarios[i]);
+  }
+  
   return doc.output("blob");
 }
