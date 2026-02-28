@@ -194,7 +194,7 @@ function App() {
     if (!fontePagadora || !user) return;
     
     try {
-      const blob = generatePDF(fontePagadora, beneficiario);
+      const blob = await generatePDF(fontePagadora, beneficiario);
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;

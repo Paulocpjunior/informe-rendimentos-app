@@ -1,8 +1,21 @@
-import { jsPDF } from "jspdf";
 import { Beneficiario, FontePagadora } from "./types";
 import { formatCNPJ, formatCPF, formatCurrency } from "./utils";
 
-export function generatePDF(fonte: FontePagadora, beneficiario: Beneficiario, anoCalendario: string = "2023", anoExercicio: string = "2024"): Blob {
+function loadScript(url: string): Promise<void> {
+  if ((window as any).jspdf) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = url;
+    s.onload = () => resolve();
+    s.onerror = () => reject(new Error('Falha CDN'));
+    document.head.appendChild(s);
+  });
+}
+
+export async function generatePDF(fonte: FontePagadora, beneficiario: Beneficiario, anoCalendario: string = "2023", anoExercicio: string = "2024"): Promise<Blob> {
+  await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.2/jspdf.umd.min.js');
+  const { jsPDF } = (window as any).jspdf;
+  
   const doc = new jsPDF();
   
   const blueDark = [26, 39, 68];
