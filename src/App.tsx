@@ -2,21 +2,11 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { auth, db } from './firebase';
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut, User } from 'firebase/auth';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import * as XLSX from 'xlsx';
 import { UploadCloud, FileText, CheckCircle, XCircle, LogOut, Download, ChevronRight, ChevronLeft, FileSpreadsheet, Building2, Users } from 'lucide-react';
 import { CNPJ_DB, validateCNPJ, validateCPF, formatCNPJ, formatCPF, formatCurrency, applyCnpjMask } from './utils';
 import { FontePagadora, Beneficiario } from './types';
 import { generatePDF, generateConsolidatedPDF } from './pdfGenerator';
-
-function loadSheetJS(): Promise<void> {
-  if ((window as any).XLSX) return Promise.resolve();
-  return new Promise((resolve, reject) => {
-    const s = document.createElement('script');
-    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
-    s.onload = () => resolve();
-    s.onerror = () => reject(new Error('Falha CDN SheetJS'));
-    document.head.appendChild(s);
-  });
-}
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -191,15 +181,14 @@ export default function App() {
     }
 
     try {
-      await loadSheetJS();
       const reader = new FileReader();
       reader.onload = (evt) => {
         try {
           const bstr = evt.target?.result;
-          const wb = (window as any).XLSX.read(bstr, { type: 'binary' });
+          const wb = XLSX.read(bstr, { type: 'binary' });
           const wsname = wb.SheetNames[0];
           const ws = wb.Sheets[wsname];
-          const data = (window as any).XLSX.utils.sheet_to_json(ws, { header: 1 });
+          const data = XLSX.utils.sheet_to_json(ws, { header: 1 });
           processExcel(data);
         } catch (err) {
           setFileError('Erro ao processar o arquivo Excel.');
@@ -222,15 +211,8 @@ export default function App() {
   const handleGenerateIndividual = async (beneficiario: Beneficiario) => {
     if (!user) return;
     try {
-      const blob = await generatePDF(getFontePagadora(), beneficiario);
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `Informe_${beneficiario.cpf}_${beneficiario.nome}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      const doc = generatePDF(getFontePagadora(), beneficiario);
+      doc.save(`Informe_${beneficiario.cpf}_${beneficiario.nome}.pdf`);
 
       await addDoc(collection(db, 'pdf_logs'), {
         userId: user.uid,
@@ -251,15 +233,8 @@ export default function App() {
     if (!user || beneficiarios.length === 0) return;
     setIsGenerating(true);
     try {
-      const blob = await generateConsolidatedPDF(getFontePagadora(), beneficiarios);
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `Informes_Consolidados_${getFontePagadora().cnpj}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      const doc = generateConsolidatedPDF(getFontePagadora(), beneficiarios);
+      doc.save(`Informes_Consolidados_${getFontePagadora().cnpj}.pdf`);
 
       await addDoc(collection(db, 'pdf_logs'), {
         userId: user.uid,

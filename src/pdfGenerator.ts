@@ -1,22 +1,6 @@
+import { jsPDF } from 'jspdf';
 import { Beneficiario, FontePagadora } from "./types";
 import { formatCNPJ, formatCPF, formatCurrency } from "./utils";
-
-async function carregarJsPDF(): Promise<any> {
-  if ((window as any).jspdf) return (window as any).jspdf.jsPDF;
-  return new Promise((resolve, reject) => {
-    const script = document.createElement('script');
-    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.2/jspdf.umd.min.js';
-    script.onload = () => {
-      if ((window as any).jspdf && (window as any).jspdf.jsPDF) {
-        resolve((window as any).jspdf.jsPDF);
-      } else {
-        reject(new Error('jsPDF não carregou'));
-      }
-    };
-    script.onerror = () => reject(new Error('Falha ao carregar CDN'));
-    document.head.appendChild(script);
-  });
-}
 
 function renderPage(doc: any, fonte: FontePagadora, beneficiario: Beneficiario) {
   const blueDark = [26, 39, 68];
@@ -160,15 +144,13 @@ function renderPage(doc: any, fonte: FontePagadora, beneficiario: Beneficiario) 
   doc.text(`${today.getDate().toString().padStart(2, '0')}/${(today.getMonth() + 1).toString().padStart(2, '0')}/${today.getFullYear()}`, 160, currentY);
 }
 
-export async function generatePDF(fonte: FontePagadora, beneficiario: Beneficiario): Promise<Blob> {
-  const jsPDF = await carregarJsPDF();
+export function generatePDF(fonte: FontePagadora, beneficiario: Beneficiario): jsPDF {
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
   renderPage(doc, fonte, beneficiario);
-  return doc.output("blob");
+  return doc;
 }
 
-export async function generateConsolidatedPDF(fonte: FontePagadora, beneficiarios: Beneficiario[]): Promise<Blob> {
-  const jsPDF = await carregarJsPDF();
+export function generateConsolidatedPDF(fonte: FontePagadora, beneficiarios: Beneficiario[]): jsPDF {
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
   
   for (let i = 0; i < beneficiarios.length; i++) {
@@ -176,5 +158,5 @@ export async function generateConsolidatedPDF(fonte: FontePagadora, beneficiario
     renderPage(doc, fonte, beneficiarios[i]);
   }
   
-  return doc.output("blob");
+  return doc;
 }
