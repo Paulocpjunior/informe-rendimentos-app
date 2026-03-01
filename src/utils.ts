@@ -8,6 +8,23 @@ export const CNPJ_DB: Record<string, any> = {
   }
 };
 
+export const NATUREZAS = [
+  { cod: "10001", desc: "Rendimento do trabalho com vínculo empregatício", codReceita: "0561", grupo: "Trabalho" },
+  { cod: "10002", desc: "Rendimento do trabalho sem vínculo empregatício", codReceita: "0588", grupo: "Trabalho" },
+  { cod: "10003", desc: "Trabalho pago a trabalhador avulso", codReceita: "0588", grupo: "Trabalho" },
+  { cod: "10004", desc: "Participação nos lucros ou resultados (PLR)", codReceita: "3562", grupo: "Trabalho" },
+  { cod: "12001", desc: "Lucros e dividendos", codReceita: null, grupo: "Capital", isento: true },
+  { cod: "12016", desc: "Juros sobre o Capital Próprio", codReceita: "5706", grupo: "Capital" },
+  { cod: "13001", desc: "Rendimentos de Aforamento", codReceita: "3208", grupo: "Aluguéis/Royalties" },
+  { cod: "13002", desc: "Rendimentos de Aluguéis, Locação ou Sublocação", codReceita: "3208", grupo: "Aluguéis/Royalties" },
+  { cod: "13003", desc: "Rendimentos de Arrendamento ou Subarrendamento", codReceita: "3208", grupo: "Aluguéis/Royalties" },
+  { cod: "13004", desc: "Importâncias pagas por terceiros por conta do locador", codReceita: "3208", grupo: "Aluguéis/Royalties" },
+  { cod: "13010", desc: "Rendimentos de Direito Autoral", codReceita: "0588", grupo: "Aluguéis/Royalties" },
+  { cod: "13012", desc: "Rendimentos de Direito de Imagem", codReceita: "3208", grupo: "Aluguéis/Royalties" },
+  { cod: "13098", desc: "Demais rendimentos de Royalties", codReceita: "3208", grupo: "Aluguéis/Royalties" },
+  { cod: "13099", desc: "Demais rendimentos de Direito", codReceita: "3208", grupo: "Aluguéis/Royalties" }
+];
+
 export function validateCNPJ(cnpj: string): boolean {
   cnpj = cnpj.replace(/[^\d]+/g, '');
   if (cnpj.length !== 14) return false;

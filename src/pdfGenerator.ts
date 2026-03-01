@@ -1,8 +1,8 @@
 import { jsPDF } from 'jspdf';
-import { Beneficiario, FontePagadora } from "./types";
+import { Beneficiario, FontePagadora, NaturezaRendimento } from "./types";
 import { formatCNPJ, formatCPF, formatCurrency, formatDocument } from "./utils";
 
-function renderPage(doc: any, fonte: FontePagadora, beneficiario: Beneficiario) {
+function renderPage(doc: any, fonte: FontePagadora, beneficiario: Beneficiario, natureza: NaturezaRendimento) {
   const blueDark = [26, 39, 68];
   const blueLight = [43, 76, 126];
   const bgLight = [220, 230, 240];
@@ -22,7 +22,7 @@ function renderPage(doc: any, fonte: FontePagadora, beneficiario: Beneficiario) 
   
   doc.setFontSize(8);
   doc.setFont("helvetica", "normal");
-  doc.text("IN RFB nº 2.060/2021", 105, 28, { align: "center" });
+  doc.text(`IN RFB nº 2.060/2021 · Natureza: ${natureza.cod} - ${natureza.desc}`, 105, 28, { align: "center" });
 
   doc.setTextColor(0, 0, 0);
 
@@ -68,7 +68,7 @@ function renderPage(doc: any, fonte: FontePagadora, beneficiario: Beneficiario) 
   doc.setFont("helvetica", "normal");
   doc.text("Natureza do Rendimento:", 140, currentY + 10);
   doc.setFont("helvetica", "bold");
-  doc.text("13002 - Aluguéis PF", 170, currentY + 10);
+  doc.text(`${natureza.cod} - ${natureza.desc}`, 170, currentY + 10);
 
   currentY += 20;
   drawSection(currentY, "3. RENDIMENTOS TRIBUTÁVEIS, DEDUÇÕES E IMPOSTO SOBRE A RENDA RETIDO NA FONTE", 30);
@@ -83,18 +83,20 @@ function renderPage(doc: any, fonte: FontePagadora, beneficiario: Beneficiario) 
     doc.line(10, y + 1, 200, y + 1);
   };
 
-  drawLine(currentY + 10, "1. Total dos rendimentos (inclusive férias)", formatCurrency(beneficiario.totalRendimentos));
+  const isLucros = natureza.cod === "12001";
+
+  drawLine(currentY + 10, "1. Total dos rendimentos (inclusive férias)", isLucros ? "R$ 0,00" : formatCurrency(beneficiario.totalRendimentos));
   drawLine(currentY + 15, "2. Contribuição previdenciária oficial", "R$ 0,00");
   drawLine(currentY + 20, "3. Contribuição a entidades de previdência complementar", "R$ 0,00");
   drawLine(currentY + 25, "4. Pensão alimentícia", "R$ 0,00");
-  drawLine(currentY + 30, "5. Imposto sobre a renda retido na fonte", formatCurrency(beneficiario.totalIrrf));
+  drawLine(currentY + 30, "5. Imposto sobre a renda retido na fonte", isLucros ? "R$ 0,00" : formatCurrency(beneficiario.totalIrrf));
 
   currentY += 40;
   drawSection(currentY, "4. RENDIMENTOS ISENTOS E NÃO TRIBUTÁVEIS", 40);
   drawLine(currentY + 10, "1. Parcela isenta dos proventos de aposentadoria, reserva remunerada, reforma e pensão (65 anos ou mais)", "R$ 0,00");
   drawLine(currentY + 15, "2. Diárias e ajudas de custo", "R$ 0,00");
   drawLine(currentY + 20, "3. Pensão e proventos de aposentadoria ou reforma por moléstia grave", "R$ 0,00");
-  drawLine(currentY + 25, "4. Lucros e dividendos, apurados a partir de 1996, pagos por pessoa jurídica (lucro real, presumido ou arbitrado)", "R$ 0,00");
+  drawLine(currentY + 25, "4. Lucros e dividendos, apurados a partir de 1996, pagos por pessoa jurídica (lucro real, presumido ou arbitrado)", isLucros ? formatCurrency(beneficiario.totalRendimentos) : "R$ 0,00");
   drawLine(currentY + 30, "5. Valores pagos ao titular ou sócio da microempresa ou empresa de pequeno porte, exceto pro labore, aluguéis ou serviços", "R$ 0,00");
   drawLine(currentY + 35, "6. Indenizações por rescisão de contrato de trabalho, inclusive a título de PDV, e por acidentes de trabalho", "R$ 0,00");
   drawLine(currentY + 40, "7. Outros", "R$ 0,00");
@@ -144,18 +146,18 @@ function renderPage(doc: any, fonte: FontePagadora, beneficiario: Beneficiario) 
   doc.text(`${today.getDate().toString().padStart(2, '0')}/${(today.getMonth() + 1).toString().padStart(2, '0')}/${today.getFullYear()}`, 160, currentY);
 }
 
-export function generatePDF(fonte: FontePagadora, beneficiario: Beneficiario): jsPDF {
+export function generatePDF(fonte: FontePagadora, beneficiario: Beneficiario, natureza: NaturezaRendimento): jsPDF {
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
-  renderPage(doc, fonte, beneficiario);
+  renderPage(doc, fonte, beneficiario, natureza);
   return doc;
 }
 
-export function generateConsolidatedPDF(fonte: FontePagadora, beneficiarios: Beneficiario[]): jsPDF {
+export function generateConsolidatedPDF(fonte: FontePagadora, beneficiarios: Beneficiario[], natureza: NaturezaRendimento): jsPDF {
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
   
   for (let i = 0; i < beneficiarios.length; i++) {
     if (i > 0) doc.addPage();
-    renderPage(doc, fonte, beneficiarios[i]);
+    renderPage(doc, fonte, beneficiarios[i], natureza);
   }
   
   return doc;

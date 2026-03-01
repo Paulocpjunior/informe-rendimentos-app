@@ -6,6 +6,14 @@ export interface FontePagadora {
   anoCalendario: string;
 }
 
+export interface NaturezaRendimento {
+  cod: string;
+  desc: string;
+  codReceita: string | null;
+  grupo: string;
+  isento?: boolean;
+}
+
 export interface Beneficiario {
   cpf: string;
   nome: string;
