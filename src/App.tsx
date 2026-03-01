@@ -266,11 +266,14 @@ export default function App() {
 
   if (!user) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-4">
+      <div className="min-h-screen flex flex-col items-center justify-center p-4">
         <div className="glass-card p-8 w-full max-w-md">
           <div className="flex justify-center mb-6">
-            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#2a7fff] to-[#1a5cbf] flex items-center justify-center text-xl font-bold shadow-lg">
-              IR
+            <div className="flex items-center gap-2">
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#2a7fff] to-[#1a5cbf] flex items-center justify-center text-xl font-bold shadow-lg">
+                SP
+              </div>
+              <span className="text-2xl font-bold text-white tracking-tight">Contábil</span>
             </div>
           </div>
           <h2 className="text-2xl font-bold text-white mb-6 text-center">
@@ -308,6 +311,11 @@ export default function App() {
             </button>
           </div>
         </div>
+        <div className="mt-8 text-center">
+          <p className="text-[#7a8fa6] text-sm">
+            © 2026 Direitos Reservados. Desenvolvido BY SP Assessoria Contábil.
+          </p>
+        </div>
       </div>
     );
   }
@@ -316,12 +324,16 @@ export default function App() {
   const totalIrrf = beneficiarios.reduce((acc, b) => acc + b.totalIrrf, 0);
 
   return (
-    <div className="min-h-screen p-6">
-      <header className="max-w-5xl mx-auto flex justify-between items-center mb-10">
+    <div className="min-h-screen p-6 flex flex-col">
+      <header className="max-w-5xl mx-auto w-full flex justify-between items-center mb-10">
         <div className="flex items-center gap-4">
-          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#2a7fff] to-[#1a5cbf] flex items-center justify-center text-xl font-bold shadow-lg">
-            IR
+          <div className="flex items-center gap-2">
+            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#2a7fff] to-[#1a5cbf] flex items-center justify-center text-xl font-bold shadow-lg">
+              SP
+            </div>
+            <span className="text-xl font-bold text-white tracking-tight hidden sm:block">Contábil</span>
           </div>
+          <div className="w-[1px] h-8 bg-white/10 hidden sm:block"></div>
           <div>
             <h1 className="text-xl font-bold text-white">Gerador de Informe de Rendimentos</h1>
             <p className="text-[#7a8fa6] text-sm">Natureza 13002 · Aluguel PF · IN RFB 2.060/2021</p>
@@ -560,6 +572,12 @@ export default function App() {
           </div>
         )}
       </main>
+
+      <footer className="max-w-5xl mx-auto w-full mt-auto pt-12 pb-4 text-center">
+        <p className="text-[#7a8fa6] text-sm">
+          © 2026 Direitos Reservados. Desenvolvido BY SP Assessoria Contábil.
+        </p>
+      </footer>
     </div>
   );
 }
