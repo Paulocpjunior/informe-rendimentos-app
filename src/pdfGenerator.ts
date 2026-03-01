@@ -1,5 +1,5 @@
 import { jsPDF } from 'jspdf';
-import { Beneficiario, FontePagadora, NaturezaRendimento } from "./types";
+import { Beneficiario, FontePagadora, NaturezaRendimento, SheetData } from "./types";
 import { formatCNPJ, formatCPF, formatCurrency, formatDocument } from "./utils";
 
 function renderPage(doc: any, fonte: FontePagadora, beneficiario: Beneficiario, natureza: NaturezaRendimento) {
@@ -152,12 +152,19 @@ export function generatePDF(fonte: FontePagadora, beneficiario: Beneficiario, na
   return doc;
 }
 
-export function generateConsolidatedPDF(fonte: FontePagadora, beneficiarios: Beneficiario[], natureza: NaturezaRendimento): jsPDF {
+export function generateConsolidatedPDF(fonte: FontePagadora, sheetsData: SheetData[]): jsPDF {
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
   
-  for (let i = 0; i < beneficiarios.length; i++) {
-    if (i > 0) doc.addPage();
-    renderPage(doc, fonte, beneficiarios[i], natureza);
+  let isFirstPage = true;
+  for (const sheet of sheetsData) {
+    // Override fonte CNPJ if sheet has a specific one
+    const currentFonte = { ...fonte, cnpj: sheet.cnpjFonte || fonte.cnpj };
+    
+    for (const beneficiario of sheet.beneficiarios) {
+      if (!isFirstPage) doc.addPage();
+      renderPage(doc, currentFonte, beneficiario, sheet.natureza);
+      isFirstPage = false;
+    }
   }
   
   return doc;

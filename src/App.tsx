@@ -4,7 +4,7 @@ import { signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthState
 import * as XLSX from 'xlsx';
 import { UploadCloud, FileText, CheckCircle, XCircle, LogOut, Download, ChevronRight, ChevronLeft, FileSpreadsheet, Building2, Users, RefreshCw, Loader2, FileCheck, Receipt } from 'lucide-react';
 import { CNPJ_DB, NATUREZAS, validateCNPJ, validateCPF, formatCNPJ, formatCPF, formatCurrency, applyCnpjMask, validateDocument, formatDocument } from './utils';
-import { FontePagadora, Beneficiario, NaturezaRendimento } from './types';
+import { FontePagadora, Beneficiario, NaturezaRendimento, SheetData } from './types';
 import { generatePDF, generateConsolidatedPDF } from './pdfGenerator';
 import { generateDARF } from './darfGenerator';
 
@@ -30,9 +30,13 @@ export default function App() {
   const [naturezaCod, setNaturezaCod] = useState('');
 
   // Step 3 State
+  const [sheetsData, setSheetsData] = useState<SheetData[]>([]);
+  const [availableSheets, setAvailableSheets] = useState<{name: string, selected: boolean, preview: any[]}[]>([]);
+  const [showSheetSelector, setShowSheetSelector] = useState(false);
   const [beneficiarios, setBeneficiarios] = useState<Beneficiario[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const [fileError, setFileError] = useState('');
+  const [activeTab, setActiveTab] = useState(0);
 
   // Step 4 State
   const [isGenerating, setIsGenerating] = useState(false);
@@ -68,6 +72,10 @@ export default function App() {
   const handleNovaAnalise = () => {
     setStep(1);
     setBeneficiarios([]);
+    setSheetsData([]);
+    setAvailableSheets([]);
+    setShowSheetSelector(false);
+    setActiveTab(0);
     setCnpjInput('');
     setRazaoSocial('');
     setResponsavel('');
@@ -143,54 +151,144 @@ export default function App() {
     return NATUREZAS.find(n => n.cod === naturezaCod) || NATUREZAS[0];
   };
 
-  const processExcel = (data: any[]) => {
-    const benesMap = new Map<string, Beneficiario>();
+  const processExcel = (wb: XLSX.WorkBook, selectedSheetNames: string[]) => {
+    const newSheetsData: SheetData[] = [];
+    let allBeneficiariosMap = new Map<string, Beneficiario>();
 
-    data.forEach(row => {
-      if (!row || !row[3] || String(row[3]).includes('Nome') || String(row[3]).includes('Proprietário')) return;
-
-      const nome = String(row[3]).trim().toUpperCase();
-      const cpfRaw = String(row[4] || '').replace(/[^\d]+/g, '');
-      const apuracao = row[5];
-      const bruto = parseFloat(String(row[6]).replace(',', '.')) || 0;
-      const irrf = parseFloat(String(row[7]).replace(',', '.')) || 0;
-
-      if (!nome || !cpfRaw) return;
-
-      let month = 0;
-      if (typeof apuracao === 'number') {
-        const date = new Date(Math.round((apuracao - 25569) * 86400 * 1000));
-        month = date.getUTCMonth();
-      } else if (typeof apuracao === 'string') {
-        const parts = apuracao.split('/');
-        if (parts.length >= 2) {
-          month = parseInt(parts[1], 10) - 1;
-        }
-      }
+    for (const sheetName of selectedSheetNames) {
+      const ws = wb.Sheets[sheetName];
+      const data = XLSX.utils.sheet_to_json(ws, { header: 1 });
       
-      if (month < 0 || month > 11 || isNaN(month)) month = 0;
+      const benesMap = new Map<string, Beneficiario>();
+      let sheetCnpj = getFontePagadora().cnpj;
+      
+      // Try to detect nature from sheet name
+      let detectedNatureza = getNatureza();
+      const lowerName = sheetName.toLowerCase();
+      if (lowerName.includes('alug')) detectedNatureza = NATUREZAS.find(n => n.cod === '13002') || detectedNatureza;
+      else if (lowerName.includes('lucro') || lowerName.includes('dividend')) detectedNatureza = NATUREZAS.find(n => n.cod === '12001') || detectedNatureza;
+      else if (lowerName.includes('salário') || lowerName.includes('trabalho') || lowerName.includes('folha')) detectedNatureza = NATUREZAS.find(n => n.cod === '10001') || detectedNatureza;
+      else if (lowerName.includes('autônom') || lowerName.includes('sem vínculo') || lowerName.includes('rpa')) detectedNatureza = NATUREZAS.find(n => n.cod === '10002') || detectedNatureza;
+      else if (lowerName.includes('royalt')) detectedNatureza = NATUREZAS.find(n => n.cod === '13098') || detectedNatureza;
 
-      if (!benesMap.has(nome)) {
-        benesMap.set(nome, {
-          cpf: cpfRaw,
-          nome: nome,
-          rendimentos: new Array(12).fill(0),
-          irrf: new Array(12).fill(0),
-          totalRendimentos: 0,
-          totalIrrf: 0
+      // Detect columns
+      let colLocalidade = 0, colCnpj = 1, colCod = 2, colNome = 3, colCpf = 4, colApuracao = 5, colBruto = 6, colIrrf = 7;
+      
+      // Look for headers in first 3 rows
+      for (let i = 0; i < Math.min(3, data.length); i++) {
+        const row = data[i] as any[];
+        if (!row) continue;
+        
+        let foundHeaders = false;
+        row.forEach((cell, idx) => {
+          if (typeof cell !== 'string') return;
+          const lowerCell = cell.toLowerCase();
+          if (/local/i.test(lowerCell)) { colLocalidade = idx; foundHeaders = true; }
+          if (/cnpj/i.test(lowerCell)) { colCnpj = idx; foundHeaders = true; }
+          if (/c[óo]d/i.test(lowerCell)) { colCod = idx; foundHeaders = true; }
+          if (/nome|propriet[áa]rio|benefici[áa]rio/i.test(lowerCell)) { colNome = idx; foundHeaders = true; }
+          if (/cpf/i.test(lowerCell)) { colCpf = idx; foundHeaders = true; }
+          if (/apura[çc][ãa]o|compet[êe]ncia|data|per[íi]odo|m[êe]s/i.test(lowerCell)) { colApuracao = idx; foundHeaders = true; }
+          if (/bruto|rendimento|valor/i.test(lowerCell)) { colBruto = idx; foundHeaders = true; }
+          if (/irrf|imposto|reten[çc]/i.test(lowerCell)) { colIrrf = idx; foundHeaders = true; }
         });
+        if (foundHeaders) break;
       }
 
-      const b = benesMap.get(nome)!;
-      b.rendimentos[month] += bruto;
-      b.irrf[month] += irrf;
-      b.totalRendimentos += bruto;
-      b.totalIrrf += irrf;
-    });
+      data.forEach(row => {
+        if (!row || !row[colNome] || String(row[colNome]).includes('Nome') || String(row[colNome]).includes('Proprietário')) return;
 
-    setBeneficiarios(Array.from(benesMap.values()));
+        const nome = String(row[colNome]).trim().toUpperCase();
+        const cpfRaw = String(row[colCpf] || '').replace(/[^\d]+/g, '');
+        const apuracao = row[colApuracao];
+        const bruto = parseFloat(String(row[colBruto]).replace(',', '.')) || 0;
+        const irrf = parseFloat(String(row[colIrrf]).replace(',', '.')) || 0;
+        
+        const rowCnpj = String(row[colCnpj] || '').replace(/[^\d]+/g, '');
+        if (rowCnpj && rowCnpj.length === 14 && sheetCnpj === getFontePagadora().cnpj) {
+            sheetCnpj = rowCnpj;
+        }
+        
+        const rowCod = String(row[colCod] || '').trim();
+        if (rowCod && NATUREZAS.some(n => n.cod === rowCod)) {
+            detectedNatureza = NATUREZAS.find(n => n.cod === rowCod) || detectedNatureza;
+        }
+
+        if (!nome || !cpfRaw || bruto === 0) return;
+
+        let month = 0;
+        if (typeof apuracao === 'number') {
+          const date = new Date(Math.round((apuracao - 25569) * 86400 * 1000));
+          month = date.getUTCMonth();
+        } else if (typeof apuracao === 'string') {
+          const parts = apuracao.split(/[-/]/);
+          if (parts.length >= 2) {
+             if (parts[0].length === 4) {
+                 month = parseInt(parts[1], 10) - 1; // YYYY-MM-DD
+             } else {
+                 month = parseInt(parts[1], 10) - 1; // DD/MM/YYYY or MM/YYYY
+                 if (parts.length === 2 && parseInt(parts[0], 10) <= 12) {
+                     month = parseInt(parts[0], 10) - 1; // MM/YYYY
+                 }
+             }
+          }
+        }
+        
+        if (month < 0 || month > 11 || isNaN(month)) month = 0;
+
+        if (!benesMap.has(nome)) {
+          benesMap.set(nome, {
+            cpf: cpfRaw,
+            nome: nome,
+            rendimentos: new Array(12).fill(0),
+            irrf: new Array(12).fill(0),
+            totalRendimentos: 0,
+            totalIrrf: 0,
+            cpfValido: validateDocument(cpfRaw)
+          });
+        }
+
+        const b = benesMap.get(nome)!;
+        b.rendimentos[month] += bruto;
+        b.irrf[month] += irrf;
+        b.totalRendimentos += bruto;
+        b.totalIrrf += irrf;
+        
+        // Add to consolidated map
+        if (!allBeneficiariosMap.has(nome)) {
+            allBeneficiariosMap.set(nome, {
+                cpf: cpfRaw,
+                nome: nome,
+                rendimentos: new Array(12).fill(0),
+                irrf: new Array(12).fill(0),
+                totalRendimentos: 0,
+                totalIrrf: 0,
+                cpfValido: validateDocument(cpfRaw)
+            });
+        }
+        const allB = allBeneficiariosMap.get(nome)!;
+        allB.rendimentos[month] += bruto;
+        allB.irrf[month] += irrf;
+        allB.totalRendimentos += bruto;
+        allB.totalIrrf += irrf;
+      });
+
+      if (benesMap.size > 0) {
+          newSheetsData.push({
+              sheetName,
+              natureza: detectedNatureza,
+              cnpjFonte: sheetCnpj,
+              beneficiarios: Array.from(benesMap.values())
+          });
+      }
+    }
+
+    setSheetsData(newSheetsData);
+    setBeneficiarios(Array.from(allBeneficiariosMap.values()));
     setStep(4);
   };
+
+  const [currentWb, setCurrentWb] = useState<XLSX.WorkBook | null>(null);
 
   const handleFile = async (file: File) => {
     setFileError('');
@@ -204,11 +302,20 @@ export default function App() {
       reader.onload = (evt) => {
         try {
           const bstr = evt.target?.result;
-          const wb = XLSX.read(bstr, { type: 'binary' });
-          const wsname = wb.SheetNames[0];
-          const ws = wb.Sheets[wsname];
-          const data = XLSX.utils.sheet_to_json(ws, { header: 1 });
-          processExcel(data);
+          const wb = XLSX.read(bstr, { type: 'binary', cellDates: true });
+          setCurrentWb(wb);
+          
+          if (wb.SheetNames.length > 1) {
+              const sheetsInfo = wb.SheetNames.map(name => {
+                  const ws = wb.Sheets[name];
+                  const data = XLSX.utils.sheet_to_json(ws, { header: 1 }).slice(0, 3);
+                  return { name, selected: true, preview: data };
+              });
+              setAvailableSheets(sheetsInfo);
+              setShowSheetSelector(true);
+          } else {
+              processExcel(wb, wb.SheetNames);
+          }
         } catch (err) {
           setFileError('Erro ao processar o arquivo Excel.');
         }
@@ -232,7 +339,22 @@ export default function App() {
     setGeneratingCpf(beneficiario.cpf);
     await new Promise(resolve => setTimeout(resolve, 100));
     try {
-      const doc = generatePDF(getFontePagadora(), beneficiario, getNatureza());
+      let nature = getNatureza();
+      let currentFonte = getFontePagadora();
+      
+      if (activeTab > 0) {
+          nature = sheetsData[activeTab - 1].natureza;
+          currentFonte = { ...currentFonte, cnpj: sheetsData[activeTab - 1].cnpjFonte || currentFonte.cnpj };
+      } else {
+          // If in general view, try to find the first sheet this beneficiario appears in to use its nature
+          const sheet = sheetsData.find(s => s.beneficiarios.some(b => b.cpf === beneficiario.cpf));
+          if (sheet) {
+              nature = sheet.natureza;
+              currentFonte = { ...currentFonte, cnpj: sheet.cnpjFonte || currentFonte.cnpj };
+          }
+      }
+
+      const doc = generatePDF(currentFonte, beneficiario, nature);
       doc.save(`Informe_${beneficiario.cpf}_${beneficiario.nome}.pdf`);
     } catch (err: any) {
       console.error('Erro detalhado:', err);
@@ -243,11 +365,11 @@ export default function App() {
   };
 
   const handleGenerateConsolidated = async () => {
-    if (!user || beneficiarios.length === 0) return;
+    if (!user || sheetsData.length === 0) return;
     setIsGenerating(true);
     await new Promise(resolve => setTimeout(resolve, 100));
     try {
-      const doc = generateConsolidatedPDF(getFontePagadora(), beneficiarios, getNatureza());
+      const doc = generateConsolidatedPDF(getFontePagadora(), sheetsData);
       doc.save(`Informes_Consolidados_${getFontePagadora().cnpj}.pdf`);
     } catch (err: any) {
       console.error('Erro detalhado:', err);
@@ -551,21 +673,99 @@ export default function App() {
               </button>
             </div>
             
-            <div 
-              onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
-              onDragLeave={(e) => { e.preventDefault(); setIsDragging(false); }}
-              onDrop={onDrop}
-              className={`border-2 border-dashed rounded-xl p-12 text-center transition-all ${isDragging ? 'border-[#2a7fff] bg-[#2a7fff]/10' : 'border-[#2a7fff]/30 hover:border-[#2a7fff]/60 bg-black/20'}`}
-            >
-              <FileSpreadsheet size={48} className={`mx-auto mb-4 ${isDragging ? 'text-[#2a7fff]' : 'text-[#7a8fa6]'}`} />
-              <p className="text-lg font-medium text-white mb-2">Arraste o arquivo Excel aqui</p>
-              <p className="text-sm text-[#7a8fa6] mb-6">ou clique para selecionar (.xlsx, .xls)</p>
-              
-              <label className="cursor-pointer glass-card hover:bg-white/10 px-6 py-2.5 rounded-lg transition-colors inline-block text-sm font-medium text-white">
-                Selecionar Arquivo
-                <input type="file" accept=".xlsx, .xls" className="hidden" onChange={(e) => e.target.files && handleFile(e.target.files[0])} />
-              </label>
-            </div>
+            {!showSheetSelector ? (
+              <div 
+                onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+                onDragLeave={(e) => { e.preventDefault(); setIsDragging(false); }}
+                onDrop={onDrop}
+                className={`border-2 border-dashed rounded-xl p-12 text-center transition-all ${isDragging ? 'border-[#2a7fff] bg-[#2a7fff]/10' : 'border-[#2a7fff]/30 hover:border-[#2a7fff]/60 bg-black/20'}`}
+              >
+                <FileSpreadsheet size={48} className={`mx-auto mb-4 ${isDragging ? 'text-[#2a7fff]' : 'text-[#7a8fa6]'}`} />
+                <p className="text-lg font-medium text-white mb-2">Arraste o arquivo Excel aqui</p>
+                <p className="text-sm text-[#7a8fa6] mb-6">ou clique para selecionar (.xlsx, .xls)</p>
+                
+                <label className="cursor-pointer glass-card hover:bg-white/10 px-6 py-2.5 rounded-lg transition-colors inline-block text-sm font-medium text-white">
+                  Selecionar Arquivo
+                  <input type="file" accept=".xlsx, .xls" className="hidden" onChange={(e) => e.target.files && handleFile(e.target.files[0])} />
+                </label>
+              </div>
+            ) : (
+              <div className="space-y-6">
+                <div className="flex justify-between items-center">
+                  <h3 className="text-white font-medium">Múltiplas planilhas detectadas</h3>
+                  <label className="flex items-center gap-2 text-sm text-white cursor-pointer">
+                    <input 
+                      type="checkbox" 
+                      checked={availableSheets.every(s => s.selected)}
+                      onChange={(e) => setAvailableSheets(sheets => sheets.map(s => ({...s, selected: e.target.checked})))}
+                      className="rounded border-white/20 bg-black/40 text-[#2a7fff] focus:ring-[#2a7fff]"
+                    />
+                    Selecionar Todas
+                  </label>
+                </div>
+                
+                <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2">
+                  {availableSheets.map((sheet, idx) => (
+                    <div key={idx} className={`glass-card p-4 transition-colors ${sheet.selected ? 'border-[#2a7fff]/50 bg-[#2a7fff]/5' : 'border-white/5 bg-black/20'}`}>
+                      <div className="flex items-center gap-3 mb-3">
+                        <input 
+                          type="checkbox" 
+                          checked={sheet.selected}
+                          onChange={(e) => {
+                            const newSheets = [...availableSheets];
+                            newSheets[idx].selected = e.target.checked;
+                            setAvailableSheets(newSheets);
+                          }}
+                          className="rounded border-white/20 bg-black/40 text-[#2a7fff] focus:ring-[#2a7fff]"
+                        />
+                        <span className="text-white font-medium">{sheet.name}</span>
+                      </div>
+                      
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-xs text-left">
+                          <tbody className="divide-y divide-white/5">
+                            {sheet.preview.map((row, rIdx) => (
+                              <tr key={rIdx}>
+                                {Array.from({length: Math.max(...sheet.preview.map(r => r.length))}).map((_, cIdx) => (
+                                  <td key={cIdx} className="py-1 px-2 text-[#7a8fa6] whitespace-nowrap truncate max-w-[150px]">
+                                    {row[cIdx] !== undefined ? String(row[cIdx]) : ''}
+                                  </td>
+                                ))}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="pt-4 flex justify-end gap-3">
+                  <button 
+                    onClick={() => {
+                      setShowSheetSelector(false);
+                      setAvailableSheets([]);
+                      setCurrentWb(null);
+                    }}
+                    className="glass-card px-6 py-2.5 font-medium text-white hover:bg-white/10 transition-colors"
+                  >
+                    Cancelar
+                  </button>
+                  <button 
+                    onClick={() => {
+                      const selectedNames = availableSheets.filter(s => s.selected).map(s => s.name);
+                      if (selectedNames.length > 0 && currentWb) {
+                        processExcel(currentWb, selectedNames);
+                      }
+                    }}
+                    disabled={!availableSheets.some(s => s.selected)}
+                    className="btn-primary px-8 py-2.5 flex items-center gap-2 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Processar Selecionadas <ChevronRight size={18} />
+                  </button>
+                </div>
+              </div>
+            )}
             {fileError && <p className="text-[#ff6b6b] text-sm mt-4 text-center flex items-center justify-center gap-1"><XCircle size={14} /> {fileError}</p>}
           </div>
         )}
@@ -619,6 +819,27 @@ export default function App() {
               </div>
             </div>
 
+            {sheetsData.length > 1 && (
+              <div className="flex gap-2 overflow-x-auto pb-2">
+                <button 
+                  onClick={() => setActiveTab(0)}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${activeTab === 0 ? 'bg-[#2a7fff] text-white' : 'glass-card text-[#7a8fa6] hover:text-white'}`}
+                >
+                  Visão Geral (Todas)
+                </button>
+                {sheetsData.map((sheet, idx) => (
+                  <button 
+                    key={idx}
+                    onClick={() => setActiveTab(idx + 1)}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors flex items-center gap-2 ${activeTab === idx + 1 ? 'bg-[#2a7fff] text-white' : 'glass-card text-[#7a8fa6] hover:text-white'}`}
+                  >
+                    {sheet.sheetName}
+                    <span className="bg-black/20 px-2 py-0.5 rounded text-xs">{sheet.natureza.cod}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+
             <div className="glass-card overflow-hidden">
               <table className="w-full text-left border-collapse">
                 <thead>
@@ -631,8 +852,8 @@ export default function App() {
                   </tr>
                 </thead>
                 <tbody className="text-sm divide-y divide-white/5">
-                  {beneficiarios.map((b, idx) => {
-                    const cpfValido = validateDocument(b.cpf);
+                  {(activeTab === 0 ? beneficiarios : sheetsData[activeTab - 1].beneficiarios).map((b, idx) => {
+                    const cpfValido = b.cpfValido;
                     return (
                       <tr key={idx} className="hover:bg-white/5 transition-colors">
                         <td className="py-3 pl-5 font-medium text-white">{b.nome}</td>
@@ -665,9 +886,13 @@ export default function App() {
                     );
                   })}
                   <tr className="border-t border-white/10 bg-black/20 font-bold">
-                    <td className="py-3 pl-5 text-white" colSpan={2}>TOTAL</td>
-                    <td className="py-3 text-right text-[#2a7fff]">{formatCurrency(totalRendimentos)}</td>
-                    <td className="py-3 text-right text-[#ff8c42]">{formatCurrency(totalIrrf)}</td>
+                    <td className="py-3 pl-5 text-white" colSpan={2}>TOTAL {activeTab > 0 ? `(${sheetsData[activeTab - 1].sheetName})` : ''}</td>
+                    <td className="py-3 text-right text-[#2a7fff]">
+                      {formatCurrency(activeTab === 0 ? totalRendimentos : sheetsData[activeTab - 1].beneficiarios.reduce((acc, b) => acc + b.totalRendimentos, 0))}
+                    </td>
+                    <td className="py-3 text-right text-[#ff8c42]">
+                      {formatCurrency(activeTab === 0 ? totalIrrf : sheetsData[activeTab - 1].beneficiarios.reduce((acc, b) => acc + b.totalIrrf, 0))}
+                    </td>
                     <td></td>
                   </tr>
                 </tbody>

@@ -21,4 +21,12 @@ export interface Beneficiario {
   irrf: number[]; // 12 months (0-11)
   totalRendimentos: number;
   totalIrrf: number;
+  cpfValido: boolean;
+}
+
+export interface SheetData {
+  sheetName: string;
+  natureza: NaturezaRendimento;
+  cnpjFonte: string;
+  beneficiarios: Beneficiario[];
 }
