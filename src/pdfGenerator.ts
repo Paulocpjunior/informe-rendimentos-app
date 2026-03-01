@@ -26,6 +26,20 @@ function renderPage(doc: any, fonte: FontePagadora, beneficiario: Beneficiario, 
 
   doc.setTextColor(0, 0, 0);
 
+  // Ano Calendario / Exercicio boxes
+  doc.setFillColor(bgLight[0], bgLight[1], bgLight[2]);
+  doc.rect(10, 32, 90, 10, "F");
+  doc.rect(110, 32, 90, 10, "F");
+  
+  doc.setFontSize(7);
+  doc.text("Ano-Calendário:", 12, 36);
+  doc.text("Exercício:", 112, 36);
+  
+  doc.setFontSize(9);
+  doc.setFont("helvetica", "bold");
+  doc.text(fonte.anoCalendario, 12, 40);
+  doc.text(fonte.exercicio, 112, 40);
+
   const drawSection = (y: number, title: string, height: number) => {
     doc.setFillColor(blueLight[0], blueLight[1], blueLight[2]);
     doc.rect(10, y, 190, 6, "F");
@@ -39,7 +53,7 @@ function renderPage(doc: any, fonte: FontePagadora, beneficiario: Beneficiario, 
     doc.setTextColor(0, 0, 0);
   };
 
-  let currentY = 35;
+  let currentY = 45;
   drawSection(currentY, "1. FONTE PAGADORA", 10);
   doc.setFontSize(7);
   doc.setFont("helvetica", "normal");
@@ -144,6 +158,11 @@ function renderPage(doc: any, fonte: FontePagadora, beneficiario: Beneficiario, 
   doc.text("DATA:", 150, currentY);
   const today = new Date();
   doc.text(`${today.getDate().toString().padStart(2, '0')}/${(today.getMonth() + 1).toString().padStart(2, '0')}/${today.getFullYear()}`, 160, currentY);
+
+  // Footer
+  doc.setFontSize(6);
+  doc.setFont("helvetica", "italic");
+  doc.text("Documento gerado conforme IN RFB nº 2.060/2021", 105, 285, { align: "center" });
 }
 
 export function generatePDF(fonte: FontePagadora, beneficiario: Beneficiario, natureza: NaturezaRendimento): jsPDF {

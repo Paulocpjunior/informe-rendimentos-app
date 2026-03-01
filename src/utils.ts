@@ -1,28 +1,23 @@
 export const CNPJ_DB: Record<string, any> = {
   "00621930000162": {
     razao_social: "FED NACIONAL COMUNIDADE EVANGELICA SARA NOSSA TERRA",
-    nome_fantasia: "SARA NOSSA TERRA",
-    situacao: "ATIVA",
+    situacao_cadastral: "ATIVA",
     municipio: "BRASILIA",
     uf: "DF"
   }
 };
 
 export const NATUREZAS = [
-  { cod: "10001", desc: "Rendimento do trabalho com vínculo empregatício", codReceita: "0561", grupo: "Trabalho" },
-  { cod: "10002", desc: "Rendimento do trabalho sem vínculo empregatício", codReceita: "0588", grupo: "Trabalho" },
-  { cod: "10003", desc: "Trabalho pago a trabalhador avulso", codReceita: "0588", grupo: "Trabalho" },
-  { cod: "10004", desc: "Participação nos lucros ou resultados (PLR)", codReceita: "3562", grupo: "Trabalho" },
-  { cod: "12001", desc: "Lucros e dividendos", codReceita: null, grupo: "Capital", isento: true },
-  { cod: "12016", desc: "Juros sobre o Capital Próprio", codReceita: "5706", grupo: "Capital" },
-  { cod: "13001", desc: "Rendimentos de Aforamento", codReceita: "3208", grupo: "Aluguéis/Royalties" },
-  { cod: "13002", desc: "Rendimentos de Aluguéis, Locação ou Sublocação", codReceita: "3208", grupo: "Aluguéis/Royalties" },
-  { cod: "13003", desc: "Rendimentos de Arrendamento ou Subarrendamento", codReceita: "3208", grupo: "Aluguéis/Royalties" },
-  { cod: "13004", desc: "Importâncias pagas por terceiros por conta do locador", codReceita: "3208", grupo: "Aluguéis/Royalties" },
-  { cod: "13010", desc: "Rendimentos de Direito Autoral", codReceita: "0588", grupo: "Aluguéis/Royalties" },
-  { cod: "13012", desc: "Rendimentos de Direito de Imagem", codReceita: "3208", grupo: "Aluguéis/Royalties" },
-  { cod: "13098", desc: "Demais rendimentos de Royalties", codReceita: "3208", grupo: "Aluguéis/Royalties" },
-  { cod: "13099", desc: "Demais rendimentos de Direito", codReceita: "3208", grupo: "Aluguéis/Royalties" }
+  { cod:"10001", desc:"Trabalho com vínculo", codReceita:"0561", grupo:"Trabalho" },
+  { cod:"10002", desc:"Trabalho sem vínculo (autônomos)", codReceita:"0588", grupo:"Trabalho" },
+  { cod:"10004", desc:"PLR", codReceita:"3562", grupo:"Trabalho" },
+  { cod:"12001", desc:"Lucros e dividendos", codReceita:null, grupo:"Capital", isento:true },
+  { cod:"12016", desc:"Juros sobre Capital Próprio", codReceita:"5706", grupo:"Capital" },
+  { cod:"13001", desc:"Aforamento", codReceita:"3208", grupo:"Aluguéis" },
+  { cod:"13002", desc:"Aluguéis, Locação ou Sublocação", codReceita:"3208", grupo:"Aluguéis" },
+  { cod:"13003", desc:"Arrendamento", codReceita:"3208", grupo:"Aluguéis" },
+  { cod:"13010", desc:"Direito Autoral", codReceita:"0588", grupo:"Royalties" },
+  { cod:"13098", desc:"Demais Royalties", codReceita:"3208", grupo:"Royalties" }
 ];
 
 export function validateCNPJ(cnpj: string): boolean {
@@ -30,32 +25,23 @@ export function validateCNPJ(cnpj: string): boolean {
   if (cnpj.length !== 14) return false;
   if (/^(\d)\1+$/.test(cnpj)) return false;
 
-  let tamanho = cnpj.length - 2;
-  let numeros = cnpj.substring(0, tamanho);
-  let digitos = cnpj.substring(tamanho);
-  let soma = 0;
-  let pos = tamanho - 7;
+  const calcDigit = (str: string, weights: number[]) => {
+    let sum = 0;
+    for (let i = 0; i < str.length; i++) {
+      sum += parseInt(str[i]) * weights[i];
+    }
+    const rest = sum % 11;
+    return rest < 2 ? 0 : 11 - rest;
+  };
 
-  for (let i = tamanho; i >= 1; i--) {
-    soma += parseInt(numeros.charAt(tamanho - i)) * pos--;
-    if (pos < 2) pos = 9;
-  }
+  const weights1 = [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
+  const weights2 = [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
 
-  let resultado = soma % 11 < 2 ? 0 : 11 - (soma % 11);
-  if (resultado !== parseInt(digitos.charAt(0))) return false;
+  const digit1 = calcDigit(cnpj.substring(0, 12), weights1);
+  if (digit1 !== parseInt(cnpj[12])) return false;
 
-  tamanho = tamanho + 1;
-  numeros = cnpj.substring(0, tamanho);
-  soma = 0;
-  pos = tamanho - 7;
-
-  for (let i = tamanho; i >= 1; i--) {
-    soma += parseInt(numeros.charAt(tamanho - i)) * pos--;
-    if (pos < 2) pos = 9;
-  }
-
-  resultado = soma % 11 < 2 ? 0 : 11 - (soma % 11);
-  if (resultado !== parseInt(digitos.charAt(1))) return false;
+  const digit2 = calcDigit(cnpj.substring(0, 13), weights2);
+  if (digit2 !== parseInt(cnpj[13])) return false;
 
   return true;
 }
@@ -65,29 +51,29 @@ export function validateCPF(cpf: string): boolean {
   if (cpf.length !== 11) return false;
   if (/^(\d)\1+$/.test(cpf)) return false;
 
-  let soma = 0;
-  let resto;
+  const calcDigit = (str: string, weights: number[]) => {
+    let sum = 0;
+    for (let i = 0; i < str.length; i++) {
+      sum += parseInt(str[i]) * weights[i];
+    }
+    const rest = (sum * 10) % 11;
+    return rest === 10 || rest === 11 ? 0 : rest;
+  };
 
-  for (let i = 1; i <= 9; i++) {
-    soma = soma + parseInt(cpf.substring(i - 1, i)) * (11 - i);
-  }
-  resto = (soma * 10) % 11;
-  if (resto === 10 || resto === 11) resto = 0;
-  if (resto !== parseInt(cpf.substring(9, 10))) return false;
+  const weights1 = [10, 9, 8, 7, 6, 5, 4, 3, 2];
+  const weights2 = [11, 10, 9, 8, 7, 6, 5, 4, 3, 2];
 
-  soma = 0;
-  for (let i = 1; i <= 10; i++) {
-    soma = soma + parseInt(cpf.substring(i - 1, i)) * (12 - i);
-  }
-  resto = (soma * 10) % 11;
-  if (resto === 10 || resto === 11) resto = 0;
-  if (resto !== parseInt(cpf.substring(10, 11))) return false;
+  const digit1 = calcDigit(cpf.substring(0, 9), weights1);
+  if (digit1 !== parseInt(cpf[9])) return false;
+
+  const digit2 = calcDigit(cpf.substring(0, 10), weights2);
+  if (digit2 !== parseInt(cpf[10])) return false;
 
   return true;
 }
 
 export function formatCurrency(value: number): string {
-  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
+  return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 export function formatCPF(cpf: string): string {
