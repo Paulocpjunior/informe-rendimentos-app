@@ -4,7 +4,7 @@ import { signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthState
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import * as XLSX from 'xlsx';
 import { UploadCloud, FileText, CheckCircle, XCircle, LogOut, Download, ChevronRight, ChevronLeft, FileSpreadsheet, Building2, Users, RefreshCw, Loader2 } from 'lucide-react';
-import { CNPJ_DB, validateCNPJ, validateCPF, formatCNPJ, formatCPF, formatCurrency, applyCnpjMask } from './utils';
+import { CNPJ_DB, validateCNPJ, validateCPF, formatCNPJ, formatCPF, formatCurrency, applyCnpjMask, validateDocument, formatDocument } from './utils';
 import { FontePagadora, Beneficiario } from './types';
 import { generatePDF, generateConsolidatedPDF } from './pdfGenerator';
 
@@ -514,7 +514,7 @@ export default function App() {
                 <thead>
                   <tr className="border-b border-white/5 bg-black/20">
                     <th className="py-3 pl-5 text-xs font-medium text-[#7a8fa6] uppercase tracking-wider">Beneficiário</th>
-                    <th className="py-3 text-xs font-medium text-[#7a8fa6] uppercase tracking-wider">CPF</th>
+                    <th className="py-3 text-xs font-medium text-[#7a8fa6] uppercase tracking-wider">CPF/CNPJ</th>
                     <th className="py-3 text-xs font-medium text-[#7a8fa6] uppercase tracking-wider text-right">Rendimentos</th>
                     <th className="py-3 text-xs font-medium text-[#7a8fa6] uppercase tracking-wider text-right">IRRF</th>
                     <th className="py-3 pr-5 text-xs font-medium text-[#7a8fa6] uppercase tracking-wider text-right">Ação</th>
@@ -522,13 +522,13 @@ export default function App() {
                 </thead>
                 <tbody className="text-sm divide-y divide-white/5">
                   {beneficiarios.map((b, idx) => {
-                    const cpfValido = validateCPF(b.cpf);
+                    const cpfValido = validateDocument(b.cpf);
                     return (
                       <tr key={idx} className="hover:bg-white/5 transition-colors">
                         <td className="py-3 pl-5 font-medium text-white">{b.nome}</td>
                         <td className="py-3">
                           <div className="flex items-center gap-2">
-                            <span className="font-mono text-[#7a8fa6]">{formatCPF(b.cpf)}</span>
+                            <span className="font-mono text-[#7a8fa6]">{formatDocument(b.cpf)}</span>
                             {cpfValido ? (
                               <span className="text-[#2ac864] bg-[#2ac864]/10 px-1.5 py-0.5 rounded text-[10px] font-bold flex items-center gap-1"><CheckCircle size={10} /> VÁLIDO</span>
                             ) : (

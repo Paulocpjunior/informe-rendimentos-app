@@ -81,6 +81,20 @@ export function formatCNPJ(cnpj: string): string {
   return cnpj.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, "$1.$2.$3/$4-$5");
 }
 
+export function formatDocument(doc: string): string {
+  const clean = doc.replace(/[^\d]+/g, '');
+  if (clean.length === 14) return formatCNPJ(clean);
+  if (clean.length === 11) return formatCPF(clean);
+  return doc;
+}
+
+export function validateDocument(doc: string): boolean {
+  const clean = doc.replace(/[^\d]+/g, '');
+  if (clean.length === 14) return validateCNPJ(clean);
+  if (clean.length === 11) return validateCPF(clean);
+  return false;
+}
+
 export function applyCnpjMask(value: string): string {
   return value
     .replace(/\D/g, '')

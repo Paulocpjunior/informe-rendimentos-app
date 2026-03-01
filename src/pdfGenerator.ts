@@ -1,6 +1,6 @@
 import { jsPDF } from 'jspdf';
 import { Beneficiario, FontePagadora } from "./types";
-import { formatCNPJ, formatCPF, formatCurrency } from "./utils";
+import { formatCNPJ, formatCPF, formatCurrency, formatDocument } from "./utils";
 
 function renderPage(doc: any, fonte: FontePagadora, beneficiario: Beneficiario) {
   const blueDark = [26, 39, 68];
@@ -53,17 +53,17 @@ function renderPage(doc: any, fonte: FontePagadora, beneficiario: Beneficiario) 
   doc.text(fonte.razaoSocial, 85, currentY + 10);
 
   currentY += 20;
-  drawSection(currentY, "2. PESSOA FÍSICA BENEFICIÁRIA DOS RENDIMENTOS", 10);
+  drawSection(currentY, "2. PESSOA FÍSICA/JURÍDICA BENEFICIÁRIA DOS RENDIMENTOS", 10);
   doc.setFontSize(7);
   doc.setFont("helvetica", "normal");
-  doc.text("CPF:", 12, currentY + 10);
+  doc.text("CPF/CNPJ:", 12, currentY + 10);
   doc.setFont("helvetica", "bold");
-  doc.text(formatCPF(beneficiario.cpf), 20, currentY + 10);
+  doc.text(formatDocument(beneficiario.cpf), 28, currentY + 10);
   
   doc.setFont("helvetica", "normal");
-  doc.text("Nome Completo:", 60, currentY + 10);
+  doc.text("Nome Completo/Razão Social:", 60, currentY + 10);
   doc.setFont("helvetica", "bold");
-  doc.text(beneficiario.nome, 82, currentY + 10);
+  doc.text(beneficiario.nome, 95, currentY + 10);
   
   doc.setFont("helvetica", "normal");
   doc.text("Natureza do Rendimento:", 140, currentY + 10);
