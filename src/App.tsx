@@ -3,7 +3,7 @@ import { auth, db } from './firebase';
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut, User } from 'firebase/auth';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import * as XLSX from 'xlsx';
-import { UploadCloud, FileText, CheckCircle, XCircle, LogOut, Download, ChevronRight, ChevronLeft, FileSpreadsheet, Building2, Users } from 'lucide-react';
+import { UploadCloud, FileText, CheckCircle, XCircle, LogOut, Download, ChevronRight, ChevronLeft, FileSpreadsheet, Building2, Users, RefreshCw, Loader2 } from 'lucide-react';
 import { CNPJ_DB, validateCNPJ, validateCPF, formatCNPJ, formatCPF, formatCurrency, applyCnpjMask } from './utils';
 import { FontePagadora, Beneficiario } from './types';
 import { generatePDF, generateConsolidatedPDF } from './pdfGenerator';
@@ -33,6 +33,7 @@ export default function App() {
 
   // Step 3 State
   const [isGenerating, setIsGenerating] = useState(false);
+  const [generatingCpf, setGeneratingCpf] = useState<string | null>(null);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
@@ -55,14 +56,18 @@ export default function App() {
     }
   };
 
-  const handleLogout = async () => {
-    await signOut(auth);
+  const handleNovaAnalise = () => {
     setStep(1);
     setBeneficiarios([]);
     setCnpjInput('');
     setRazaoSocial('');
     setResponsavel('');
     setCnpjStatus('idle');
+  };
+
+  const handleLogout = async () => {
+    await signOut(auth);
+    handleNovaAnalise();
   };
 
   const handleCnpjChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -210,6 +215,9 @@ export default function App() {
 
   const handleGenerateIndividual = async (beneficiario: Beneficiario) => {
     if (!user) return;
+    setGeneratingCpf(beneficiario.cpf);
+    // Yield to browser to show spinner
+    await new Promise(resolve => setTimeout(resolve, 50));
     try {
       const doc = generatePDF(getFontePagadora(), beneficiario);
       doc.save(`Informe_${beneficiario.cpf}_${beneficiario.nome}.pdf`);
@@ -226,12 +234,16 @@ export default function App() {
     } catch (err: any) {
       console.error('Erro detalhado:', err);
       alert('Erro: ' + err.message);
+    } finally {
+      setGeneratingCpf(null);
     }
   };
 
   const handleGenerateConsolidated = async () => {
     if (!user || beneficiarios.length === 0) return;
     setIsGenerating(true);
+    // Yield to browser to show spinner
+    await new Promise(resolve => setTimeout(resolve, 50));
     try {
       const doc = generateConsolidatedPDF(getFontePagadora(), beneficiarios);
       doc.save(`Informes_Consolidados_${getFontePagadora().cnpj}.pdf`);
@@ -247,8 +259,9 @@ export default function App() {
     } catch (err: any) {
       console.error('Erro detalhado:', err);
       alert('Erro: ' + err.message);
+    } finally {
+      setIsGenerating(false);
     }
-    setIsGenerating(false);
   };
 
   if (!user) {
@@ -459,16 +472,24 @@ export default function App() {
         {step === 3 && (
           <div className="space-y-6">
             <div className="flex justify-between items-center">
-              <button onClick={() => setStep(2)} className="text-sm text-[#7a8fa6] hover:text-white flex items-center gap-1">
-                <ChevronLeft size={16} /> Voltar
-              </button>
+              <div className="flex gap-3">
+                <button onClick={() => setStep(2)} className="text-sm text-[#7a8fa6] hover:text-white flex items-center gap-1">
+                  <ChevronLeft size={16} /> Voltar
+                </button>
+                <button onClick={handleNovaAnalise} className="text-sm text-[#2a7fff] hover:text-blue-400 flex items-center gap-1 ml-4">
+                  <RefreshCw size={14} /> Nova Análise
+                </button>
+              </div>
               <button 
                 onClick={handleGenerateConsolidated}
-                disabled={isGenerating}
+                disabled={isGenerating || generatingCpf !== null}
                 className="btn-primary px-6 py-2.5 flex items-center gap-2 font-medium"
               >
-                <FileText size={18} /> 
-                {isGenerating ? 'Gerando...' : `Gerar PDF Consolidado (${beneficiarios.length} informes)`}
+                {isGenerating ? (
+                  <><Loader2 size={18} className="animate-spin" /> Gerando...</>
+                ) : (
+                  <><FileText size={18} /> Gerar PDF Consolidado ({beneficiarios.length} informes)</>
+                )}
               </button>
             </div>
 
@@ -520,9 +541,14 @@ export default function App() {
                         <td className="py-3 pr-5 text-right">
                           <button 
                             onClick={() => handleGenerateIndividual(b)}
-                            className="inline-flex items-center gap-1.5 glass-card hover:bg-white/10 px-3 py-1.5 rounded text-xs font-medium text-white transition-colors"
+                            disabled={isGenerating || generatingCpf !== null}
+                            className="inline-flex items-center gap-1.5 glass-card hover:bg-white/10 px-3 py-1.5 rounded text-xs font-medium text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                           >
-                            <FileText size={14} /> Gerar PDF
+                            {generatingCpf === b.cpf ? (
+                              <><Loader2 size={14} className="animate-spin" /> Gerando</>
+                            ) : (
+                              <><FileText size={14} /> Gerar PDF</>
+                            )}
                           </button>
                         </td>
                       </tr>
