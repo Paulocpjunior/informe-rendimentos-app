@@ -2,14 +2,15 @@ import { initializeApp, getApps } from 'firebase/app';
 import { getAuth, setPersistence, browserLocalPersistence } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 
-// ⚠️ SUBSTITUA com suas credenciais do Firebase Console
+// ⚠️ CONFIGURAÇÃO FIREBASE
 const firebaseConfig = {
-  apiKey: "SUA_API_KEY",
-  authDomain: "SEU_AUTH_DOMAIN",
-  projectId: "SEU_PROJECT_ID",
-  storageBucket: "SEU_STORAGE_BUCKET",
-  messagingSenderId: "SEU_SENDER_ID",
-  appId: "SEU_APP_ID"
+  apiKey: "AIzaSyA9bPtg6W93nAEMe_13OqMZ1KHwZlPKWA0",
+  authDomain: "gen-lang-client-0569062468.firebaseapp.com",
+  projectId: "gen-lang-client-0569062468",
+  storageBucket: "gen-lang-client-0569062468.firebasestorage.app",
+  messagingSenderId: "292090471177",
+  appId: "1:292090471177:web:b78c80c6452290851829d8",
+  measurementId: "G-P3N0LYJHRV"
 };
 
 let app;
