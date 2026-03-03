@@ -4,7 +4,7 @@ import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import {
   validarCNPJ, validarCPF, fmtMoeda, fmtCPF, fmtCNPJ,
-  MESES, NATUREZA, CNPJ_DB, parseExcel, gerarPDF, downloadPDF
+  MESES, NATUREZA, CNPJ_DB, parseExcel, gerarPDF, downloadPDF, fetchCNPJ
 } from '../utils/informeUtils';
 
 export default function InformeApp() {
@@ -24,18 +24,37 @@ export default function InformeApp() {
 
   const mask = (e) => {
     let v = e.target.value.replace(/\D/g, '').slice(0, 14);
-    if (v.length > 12) v = v.slice(0,2)+'.'+v.slice(2,5)+'.'+v.slice(5,8)+'/'+v.slice(8,12)+'-'+v.slice(12);
-    else if (v.length > 8) v = v.slice(0,2)+'.'+v.slice(2,5)+'.'+v.slice(5,8)+'/'+v.slice(8);
-    else if (v.length > 5) v = v.slice(0,2)+'.'+v.slice(2,5)+'.'+v.slice(5);
-    else if (v.length > 2) v = v.slice(0,2)+'.'+v.slice(2);
+    if (v.length > 12) v = v.slice(0, 2) + '.' + v.slice(2, 5) + '.' + v.slice(5, 8) + '/' + v.slice(8, 12) + '-' + v.slice(12);
+    else if (v.length > 8) v = v.slice(0, 2) + '.' + v.slice(2, 5) + '.' + v.slice(5, 8) + '/' + v.slice(8);
+    else if (v.length > 5) v = v.slice(0, 2) + '.' + v.slice(2, 5) + '.' + v.slice(5);
+    else if (v.length > 2) v = v.slice(0, 2) + '.' + v.slice(2);
     setCnpj(v); setCErr(''); setCData(null); setCVal(null);
     const dig = v.replace(/\D/g, '');
     if (dig.length === 14) {
       const r = validarCNPJ(dig); setCVal(r);
       if (r.valid) {
-        const dbEntry = CNPJ_DB[dig]; setCData(dbEntry || null);
-        setFp(p => ({ ...p, cnpj: dig, nome: dbEntry ? dbEntry.razao_social : p.nome }));
-      } else setCErr(r.error);
+        const dbEntry = CNPJ_DB[dig];
+        if (dbEntry) {
+          setCData(dbEntry);
+          setFp(p => ({ ...p, cnpj: dig, nome: dbEntry.razao_social }));
+        } else {
+          setCErr('Buscando dados na Receita Federal...');
+          fetchCNPJ(dig).then(apiData => {
+            if (apiData) {
+              setCErr('');
+              setCData(apiData);
+              setCVal(prev => prev ? { ...prev, tipo: apiData.tipo } : null);
+              setFp(p => ({ ...p, cnpj: dig, nome: apiData.razao_social }));
+            } else {
+              setCErr('CNPJ não encontrado na base de dados pública.');
+              setCData(null);
+              setFp(p => ({ ...p, cnpj: dig }));
+            }
+          });
+        }
+      } else {
+        setCErr(r.error);
+      }
     }
   };
 
@@ -64,7 +83,7 @@ export default function InformeApp() {
     try {
       const doc = await gerarPDF(fp, bens, idx);
       const nm = idx != null
-        ? `INFORME_${bens[idx].cpf}_${bens[idx].nome.replace(/\s/g,'_').slice(0,25)}_${fp.anoCalendario}.pdf`
+        ? `INFORME_${bens[idx].cpf}_${bens[idx].nome.replace(/\s/g, '_').slice(0, 25)}_${fp.anoCalendario}.pdf`
         : `INFORMES_CONSOLIDADO_${fp.anoCalendario}.pdf`;
       downloadPDF(doc, nm);
       setMsg(`✓ PDF gerado: ${nm}`);
@@ -109,7 +128,7 @@ export default function InformeApp() {
       <div style={{ maxWidth: 920, margin: '0 auto', padding: '24px 20px' }}>
         {/* STEPS */}
         <div style={{ display: 'flex', gap: 6, marginBottom: 24 }}>
-          {[{n:1,l:'Fonte Pagadora'},{n:2,l:'Importar Dados'},{n:3,l:'Gerar PDFs'}].map(it => (
+          {[{ n: 1, l: 'Fonte Pagadora' }, { n: 2, l: 'Importar Dados' }, { n: 3, l: 'Gerar PDFs' }].map(it => (
             <button key={it.n} onClick={() => { if (it.n <= 2 || bens.length > 0) setStep(it.n); }}
               style={{ flex: 1, padding: '11px 14px', background: step === it.n ? 'rgba(42,127,255,0.15)' : 'rgba(255,255,255,0.03)', border: step === it.n ? '1px solid rgba(42,127,255,0.4)' : '1px solid rgba(255,255,255,0.06)', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 9 }}>
               <span style={{ width: 26, height: 26, borderRadius: '50%', background: step >= it.n ? 'linear-gradient(135deg,#2a7fff,#1a5cbf)' : 'rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, color: step >= it.n ? '#fff' : '#556' }}>{it.n}</span>
@@ -157,8 +176,8 @@ export default function InformeApp() {
             style={{ border: drag ? '2px dashed #2a7fff' : '2px dashed rgba(42,127,255,0.3)', borderRadius: 12, padding: '40px 20px', textAlign: 'center', cursor: 'pointer', background: drag ? 'rgba(42,127,255,0.1)' : file ? 'rgba(42,200,100,0.04)' : 'rgba(42,127,255,0.03)', marginBottom: 18, transition: 'all 0.2s' }}>
             <input ref={fR} type="file" accept=".xlsx,.xls" onChange={e => processFile(e.target.files[0])} style={{ display: 'none' }} />
             {busy ? <div style={{ color: '#2a7fff' }}><div style={{ fontSize: 28 }}>⏳</div><div style={{ fontSize: 13, fontWeight: 600 }}>Processando...</div></div>
-            : file ? <div><div style={{ fontSize: 28 }}>📊</div><div style={{ fontSize: 14, fontWeight: 600, color: '#2ac864' }}>{file.name}</div><div style={{ fontSize: 12, color: '#7a8fa6', marginTop: 4 }}>{bens.length} beneficiário(s)</div></div>
-            : <div><div style={{ fontSize: 36, opacity: 0.6 }}>📁</div><div style={{ fontSize: 14, color: '#ccd', fontWeight: 500, marginTop: 8 }}>Arraste o arquivo Excel aqui</div><div style={{ fontSize: 12, color: '#667', marginTop: 6 }}>ou clique para selecionar · .xlsx, .xls</div></div>}
+              : file ? <div><div style={{ fontSize: 28 }}>📊</div><div style={{ fontSize: 14, fontWeight: 600, color: '#2ac864' }}>{file.name}</div><div style={{ fontSize: 12, color: '#7a8fa6', marginTop: 4 }}>{bens.length} beneficiário(s)</div></div>
+                : <div><div style={{ fontSize: 36, opacity: 0.6 }}>📁</div><div style={{ fontSize: 14, color: '#ccd', fontWeight: 500, marginTop: 8 }}>Arraste o arquivo Excel aqui</div><div style={{ fontSize: 12, color: '#667', marginTop: 6 }}>ou clique para selecionar · .xlsx, .xls</div></div>}
           </div>
           {bens.length > 0 && <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, marginBottom: 18 }}>
             <thead><tr style={{ borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
