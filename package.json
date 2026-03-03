@@ -6,6 +6,8 @@
   "description": "Gerador de Informe de Rendimentos - Natureza 13002 - IN RFB 2.060/2021",
   "dependencies": {
     "firebase": "^10.7.1",
+    "jspdf": "^4.2.0",
+    "jspdf-autotable": "^5.0.7",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-scripts": "5.0.1",
