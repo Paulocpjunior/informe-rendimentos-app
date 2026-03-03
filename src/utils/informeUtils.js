@@ -279,12 +279,13 @@ export async function gerarPDF(fp, beneficiarios, idx) {
       doc.text(MESES[j], c1, yl); doc.text(fmtMoeda(b.rend[j]), c2, yl, { align: 'right' }); doc.text(fmtMoeda(b.irrf[j]), c3, yl, { align: 'right' });
       doc.text(MESES[j + 6], c4, yl); doc.text(fmtMoeda(b.rend[j + 6]), c5, yl, { align: 'right' }); doc.text(fmtMoeda(b.irrf[j + 6]), c6, yl, { align: 'right' });
     }
-    const yT = yt + 25;
-    doc.setDrawColor(43, 76, 126); doc.line(c1, yT - 1, c3 + 1, yT - 1);
+    const yT = yt + 27;
+    doc.setDrawColor(43, 76, 126); doc.setLineWidth(0.3);
+    doc.line(c1, yT - 4, c6 + 1, yT - 4);
     doc.setFont('helvetica', 'bold'); doc.setTextColor(43, 76, 126);
-    doc.text('TOTAL ANUAL', c1, yT); doc.setTextColor(0);
-    doc.text(fmtMoeda(b.totalRend), c2, yT, { align: 'right' });
-    doc.text(fmtMoeda(b.totalIRRF), c3, yT, { align: 'right' });
+    doc.text('TOTAL ANUAL', c4, yT); doc.setTextColor(0);
+    doc.text(fmtMoeda(b.totalRend), c5, yT, { align: 'right' });
+    doc.text(fmtMoeda(b.totalIRRF), c6, yT, { align: 'right' });
     y += iH + 2.5;
 
     // Responsável
