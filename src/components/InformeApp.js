@@ -4,7 +4,7 @@ import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import {
   validarCNPJ, validarCPF, fmtMoeda, fmtCPF, fmtCNPJ,
-  MESES, NATUREZA, CNPJ_DB, parseExcel, gerarPDF, downloadPDF, fetchCNPJ
+  MESES, NATUREZA, CNPJ_DB, parseExcel, gerarPDF, downloadPDF, fetchCNPJ, gerarDARF
 } from '../utils/informeUtils';
 
 export default function InformeApp() {
@@ -154,11 +154,11 @@ export default function InformeApp() {
             if (it.n === 2) { isCurrent = false; canClick = step >= 1; clickStep = 1; }
             if (it.n === 3) { isCurrent = step === 2; canClick = fp.nome !== ''; clickStep = 2; }
             if (it.n === 4) { isCurrent = step === 3; canClick = bens.length > 0; clickStep = 3; }
-            if (it.n === 5) { isCurrent = false; canClick = false; }
+            if (it.n === 5) { isCurrent = step === 4; canClick = step >= 3; clickStep = 4; }
 
             const isActive = isCurrent;
-            const isDone = (step === 2 && it.n < 3) || (step === 3 && it.n < 4);
-            const isOpacity = (it.n === 5 || it.n === 2) ? 0.4 : 1;
+            const isDone = (step === 2 && it.n < 3) || (step === 3 && it.n < 4) || (step === 4 && it.n < 5);
+            const isOpacity = (it.n === 5 && step < 3) || (it.n === 2) ? 0.4 : 1;
 
             return (
               <React.Fragment key={it.n}>
@@ -259,7 +259,7 @@ export default function InformeApp() {
           </button>
 
           <h3 style={{ fontSize: 11, fontWeight: 500, color: textMuted, margin: '0 0 12px' }}>Downloads Individuais por Beneficiário</h3>
-          <div style={{ display: 'grid', gap: 8 }}>
+          <div style={{ display: 'grid', gap: 8, marginBottom: 32 }}>
             {bens.map((b, i) => (
               <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', borderRadius: 8, background: inputBg }}>
                 <div>
@@ -271,6 +271,53 @@ export default function InformeApp() {
                 </button>
               </div>
             ))}
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <button onClick={() => setStep(2)} style={S.bs}>Voltar</button>
+            <button onClick={() => setStep(4)} style={S.bp}>Avançar para DARF {'>'}</button>
+          </div>
+        </div>}
+
+        {step === 4 && <div style={S.card}>
+          <h2 style={{ fontSize: 14, fontWeight: 600, color: textWhite, margin: '0 0 16px' }}>Gerar Guia de Arrecadação (DARF)</h2>
+          <div style={{ padding: '24px', borderRadius: 10, background: inputBg, border: `1px solid ${borderCol}`, marginBottom: 32 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, marginBottom: 20 }}>
+              <div>
+                <div style={{ fontSize: 11, color: textMuted, marginBottom: 6 }}>Código da Receita</div>
+                <div style={{ fontSize: 16, fontWeight: 600, color: textWhite }}>3208 - Aluguéis</div>
+              </div>
+              <div>
+                <div style={{ fontSize: 11, color: textMuted, marginBottom: 6 }}>Período de Apuração</div>
+                <div style={{ fontSize: 16, fontWeight: 600, color: textWhite }}>31/12/{fp.anoCalendario}</div>
+              </div>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
+              <div>
+                <div style={{ fontSize: 11, color: textMuted, marginBottom: 6 }}>Vencimento Base</div>
+                <div style={{ fontSize: 16, fontWeight: 600, color: textWhite }}>20/01/{parseInt(fp.anoCalendario) + 1}</div>
+              </div>
+              <div>
+                <div style={{ fontSize: 11, color: textMuted, marginBottom: 6 }}>Valor Total do DARF</div>
+                <div style={{ fontSize: 24, fontWeight: 700, color: '#fb923c' }}>R$ {fmtMoeda(bens.reduce((a, x) => a + x.totalIRRF, 0))}</div>
+              </div>
+            </div>
+          </div>
+
+          <button onClick={async () => {
+            setBusy(true);
+            try {
+              const doc = await gerarDARF(fp, bens, `20/01/${parseInt(fp.anoCalendario) + 1}`);
+              downloadPDF(doc, `DARF_3208_${fp.anoCalendario}.pdf`);
+              setMsg('✓ DARF gerado em PDF com sucesso!');
+            } catch (e) { alert(e.message); }
+            finally { setBusy(false); }
+          }} disabled={busy}
+            style={{ ...S.bp, width: '100%', padding: 14, fontSize: 13, marginBottom: 32 }}>
+            <span style={{ marginRight: 6 }}>📄</span> {busy ? 'Gerando DARF...' : `Baixar Guia DARF (PDF)`}
+          </button>
+
+          <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
+            <button onClick={() => setStep(3)} style={S.bs}>Voltar</button>
           </div>
         </div>}
       </div>

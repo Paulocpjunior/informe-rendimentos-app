@@ -302,6 +302,69 @@ export async function gerarPDF(fp, beneficiarios, idx) {
   return doc;
 }
 
+// ═══ GERAR DARF PDF ═══
+export async function gerarDARF(fp, beneficiarios, dataVencimento) {
+  const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+  const pw = 210;
+
+  const totalPrincipal = beneficiarios.reduce((acc, b) => acc + b.totalIRRF, 0);
+
+  // Layout Básico DARF Preto e Branco
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(14);
+  doc.text('MINISTÉRIO DA FAZENDA', pw / 2, 20, { align: 'center' });
+  doc.text('SECRETARIA DA RECEITA FEDERAL', pw / 2, 26, { align: 'center' });
+  doc.text('Documento de Arrecadação de Receitas Federais', pw / 2, 32, { align: 'center' });
+  doc.text('DARF', pw / 2, 38, { align: 'center' });
+
+  doc.setFontSize(10);
+  doc.setLineWidth(0.3);
+  doc.rect(20, 50, 170, 100);
+
+  doc.line(90, 50, 90, 150);
+
+  doc.setFont('helvetica', 'normal');
+  doc.text('01 NOME / TELEFONE', 22, 55);
+  doc.setFont('helvetica', 'bold');
+  const nomeSplit = doc.splitTextToSize(fp.nome, 65);
+  doc.text(nomeSplit, 22, 62);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  const infoExtra = 'Este documento de apoio foi gerado pelo software Auxiliar\nde Informes. O código de barras obrigatoriamente deve\nser gerado nativamente no portal do SicalcWeb Federal\nou via e-CAC para processamento de juros e multas atuais.';
+  const infoLines = doc.splitTextToSize(infoExtra, 65);
+  doc.text(infoLines, 22, 120);
+
+  const rightX = 90;
+  const rw = 100;
+
+  const fields = [
+    { label: '02 PERÍODO DE APURAÇÃO', value: `31/12/${fp.anoCalendario}` },
+    { label: '03 NÚMERO DO CPF OU CNPJ', value: fmtCNPJ(fp.cnpj) },
+    { label: '04 CÓDIGO DA RECEITA', value: '3208' },
+    { label: '05 NÚMERO DE REFERÊNCIA', value: '' },
+    { label: '06 DATA DE VENCIMENTO', value: dataVencimento || `20/01/${parseInt(fp.anoCalendario) + 1}` },
+    { label: '07 VALOR DO PRINCIPAL', value: fmtMoeda(totalPrincipal) },
+    { label: '08 VALOR DA MULTA', value: '0,00' },
+    { label: '09 VALOR DOS JUROS E / OU ENCARGOS', value: '0,00' },
+    { label: '10 VALOR TOTAL', value: fmtMoeda(totalPrincipal) }
+  ];
+
+  let currentY = 50;
+  fields.forEach((f, i) => {
+    doc.rect(rightX, currentY, rw, 11);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7);
+    doc.text(f.label, rightX + 2, currentY + 4);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(11);
+    doc.text(f.value, rightX + rw - 2, currentY + 9, { align: 'right' });
+    currentY += 11;
+  });
+
+  return doc;
+}
+
 // ═══ DOWNLOAD PDF ═══
 export function downloadPDF(doc, filename) {
   const blob = doc.output('blob');
