@@ -9,7 +9,7 @@ import {
 
 export default function InformeApp() {
   const { user, logout } = useAuth();
-  const [step, setStep] = useState(3);
+  const [step, setStep] = useState(1);
   const [cnpj, setCnpj] = useState('');
   const [cData, setCData] = useState(null);
   const [cVal, setCVal] = useState(null);
