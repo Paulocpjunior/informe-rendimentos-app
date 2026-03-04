@@ -1,4 +1,5 @@
 import { jsPDF } from "jspdf";
+import JsBarcode from "jsbarcode";
 
 // ═══ VALIDAÇÃO CNPJ ═══
 export function validarCNPJ(cnpj) {
@@ -302,6 +303,20 @@ export async function gerarPDF(fp, beneficiarios, idx) {
   return doc;
 }
 
+export function mod10Arrecadacao(valor) {
+  let soma = 0;
+  let peso = 2;
+  for (let i = valor.length - 1; i >= 0; i--) {
+    let r = parseInt(valor[i], 10) * peso;
+    if (r > 9) r = Math.floor(r / 10) + (r % 10);
+    soma += r;
+    peso = peso === 2 ? 1 : 2;
+  }
+  let resto = soma % 10;
+  let mod = 10 - resto;
+  return mod === 10 ? 0 : mod;
+}
+
 // ═══ GERAR DARF PDF ═══
 export async function gerarDARF(fp, beneficiarios, dataVencimento) {
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
@@ -361,6 +376,44 @@ export async function gerarDARF(fp, beneficiarios, dataVencimento) {
     doc.text(f.value, rightX + rw - 2, currentY + 9, { align: 'right' });
     currentY += 11;
   });
+
+  // ========== GERAR CÓDIGO DE BARRAS FEBRABAN ARRECADAÇÃO ==========
+  // 1-3: "856" (Arrecadação / Gov / Mod10)
+  // 4: DV Geral (calculado depois)
+  // 5-15: Valor
+  const vlCents = Math.round(totalPrincipal * 100).toString().padStart(11, '0');
+  const org = "0000"; // Orgão/Governo Genérico
+  const cnpjClean = fp.cnpj.replace(/\D/g, '').padEnd(14, '0');
+  const codRec = "3208";
+  const periodo = `12${fp.anoCalendario}`; // MMAAAA
+  let refLivre = (cnpjClean + codRec + periodo).padEnd(25, '0').slice(0, 25);
+
+  let barrasSemDV = "856" + vlCents + org + refLivre;
+  const dvGeral = mod10Arrecadacao(barrasSemDV);
+  const barrasFinal = "856" + dvGeral + vlCents + org + refLivre;
+
+  // Format Linha Digitavel (4 Blocos de 11 + DV bloco)
+  let linhaDigitavel = "";
+  for (let b = 0; b < 4; b++) {
+    const bloco = barrasFinal.substr(b * 11, 11);
+    const dvBloco = mod10Arrecadacao(bloco);
+    linhaDigitavel += bloco + "-" + dvBloco + (b < 3 ? " " : "");
+  }
+
+  // Desenhar a linha e barras no final
+  doc.setFontSize(11);
+  doc.text(linhaDigitavel, rightX + rw / 2, currentY + 16, { align: 'center' });
+
+  // Render Barcode
+  try {
+    const canvas = document.createElement("canvas");
+    JsBarcode(canvas, barrasFinal, { format: "ITF", displayValue: false, margin: 0, height: 50, width: 2 });
+    const imgData = canvas.toDataURL("image/png");
+    doc.addImage(imgData, 'PNG', rightX + 5, currentY + 20, rw - 10, 16);
+  } catch (err) {
+    doc.setFontSize(9);
+    doc.text("(Erro ao gerar barras)", rightX + rw / 2, currentY + 25, { align: 'center' });
+  }
 
   return doc;
 }
