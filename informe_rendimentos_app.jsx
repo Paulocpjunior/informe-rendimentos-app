@@ -72,7 +72,7 @@ export default function App() {
   function processFile(f) {
     setBusy(true); parseXLS(f).then(r => {
       setBens(r.bens);
-      setStep(2);
+      setStep(4);
     }).finally(() => setBusy(false));
   }
 
@@ -88,17 +88,17 @@ export default function App() {
         {step === 1 && <div style={{ background: "#1b2a4a", padding: 30, borderRadius: 12 }}>
           <h2>Dados Gerais</h2>
           <input placeholder="Responsável" style={{ width: '100%', padding: 12, marginBottom: 10 }} value={fp.resp} onChange={e => setFp({ ...fp, resp: e.target.value })} />
-          <button onClick={() => setStep(3)} style={{ background: "#2a7fff", color: '#fff', border: 0, padding: 12 }}>Ir para Importação</button>
+          <button onClick={() => setStep(2)} style={{ background: "#2a7fff", color: '#fff', border: 0, padding: 12 }}>Continuar {'>'}</button>
         </div>}
 
         {step === 2 && <div style={{ background: "#1b2a4a", padding: 30, borderRadius: 12 }}>
           <h2>Selecione o Código</h2>
           {Object.keys(TIPOS_RENDIMENTO).map(k => (
-            <div key={k} onClick={() => { setTipo(k); setStep(4); }} style={{ padding: 15, border: "1px solid #333", marginBottom: 10, cursor: 'pointer', background: tipo === k ? "#2a7fff" : "transparent" }}>
+            <div key={k} onClick={() => { setTipo(k); setStep(3); }} style={{ padding: 15, border: "1px solid #333", marginBottom: 10, cursor: 'pointer', background: tipo === k ? "#2a7fff" : "transparent" }}>
               {TIPOS_RENDIMENTO[k].titulo} ({k})
             </div>
           ))}
-          <button onClick={() => setStep(3)}>Voltar</button>
+          <button onClick={() => setStep(1)}>Voltar</button>
         </div>}
 
         {step === 3 && <div style={{ background: "#1b2a4a", padding: 30, borderRadius: 12, textAlign: 'center' }}>

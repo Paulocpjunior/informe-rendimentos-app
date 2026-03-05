@@ -105,10 +105,10 @@ export default function InformeApp() {
       setBens(newBens);
 
       const multiStr = r.cnpjsUnicos.length > 1 ? ` de ${r.cnpjsUnicos.length} fontes (abas)` : '';
-      setMsg(`✓ ${r.beneficiarios.length} beneficiário(s) extraídos${multiStr} com sucesso. Selecione o Tipo de Rendimento abaixo.`);
+      setMsg(`✓ ${r.beneficiarios.length} beneficiário(s) extraídos${multiStr} com sucesso.`);
 
-      // CORREÇÃO: Não pular para o 4, ir para o 2 se tipo estiver vazio ou apenas avançar para 2
-      setStep(2);
+      // Avançar para Resultados (Passo 4) após importação
+      setStep(4);
     } catch (err) { alert('Erro: ' + err.message); }
     finally { setBusy(false); }
   };
