@@ -24,6 +24,13 @@ export default function InformeApp() {
   const [msg, setMsg] = useState('');
   const fR = useRef(null);
 
+  // RESET DE SEGURANÇA NO MOUNT
+  React.useEffect(() => {
+    setStep(1);
+    setTipoRendimento('');
+    setFp({ cnpj: '', nome: '', exercicio: '2026', anoCalendario: '2025', responsavel: '' });
+  }, []);
+
   const mask = (e) => {
     let v = e.target.value.replace(/\D/g, '').slice(0, 14);
     if (v.length > 12) v = v.slice(0, 2) + '.' + v.slice(2, 5) + '.' + v.slice(5, 8) + '/' + v.slice(8, 12) + '-' + v.slice(12);
@@ -203,8 +210,8 @@ export default function InformeApp() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
             <div style={{ width: 40, height: 40, borderRadius: 8, background: primaryBlue, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 700, color: '#fff' }}>IR</div>
             <div>
-              <h1 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: textWhite }}>Gerador de Informe de Rendimentos <span style={{ fontSize: 10, color: '#4ade80', marginLeft: 8, padding: '2px 6px', background: 'rgba(74,222,128,0.1)', borderRadius: 4 }}>v1.1.0</span></h1>
-              <p style={{ margin: 0, fontSize: 11, color: textMuted, marginTop: 2 }}>{TIPOS_RENDIMENTO[tipoRendimento]?.descInfo || 'Selecione o tipo no Passo 2'}</p>
+              <h1 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: textWhite }}>Gerador de Informe de Rendimentos <span style={{ fontSize: 10, color: '#4ade80', marginLeft: 8, padding: '2px 6px', background: 'rgba(74,222,128,0.1)', borderRadius: 4 }}>v1.1.2</span></h1>
+              <p style={{ margin: 0, fontSize: 11, color: textMuted, marginTop: 2 }}>{TIPOS_RENDIMENTO[tipoRendimento]?.descInfo || 'Selecione o código no Passo 2'}</p>
             </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
@@ -294,11 +301,12 @@ export default function InformeApp() {
             style={{ border: drag ? `1px dashed ${primaryBlue}` : `1px dashed ${borderCol}`, borderRadius: 10, padding: '50px 20px', textAlign: 'center', cursor: 'pointer', background: drag ? 'rgba(40,98,246,0.05)' : inputBg, marginBottom: 24, transition: 'all 0.2s' }}>
             <input ref={fR} type="file" accept=".xlsx,.xls" onChange={e => processFile(e.target.files[0])} style={{ display: 'none' }} />
             {busy ? <div style={{ color: primaryBlue }}><div style={{ fontSize: 24 }}>⏳</div><div style={{ fontSize: 13, fontWeight: 500, marginTop: 10 }}>Lendo arquivo...</div></div>
-              : file ? <div><div style={{ fontSize: 24 }}>📊</div><div style={{ fontSize: 13, fontWeight: 500, color: '#4ade80', marginTop: 10 }}>{file.name}</div><div style={{ fontSize: 11, color: textMuted, marginTop: 4 }}>{bens.length} cadastros listados</div></div>
-                : <div><div style={{ fontSize: 32, color: '#3a445c' }}>📁</div><div style={{ fontSize: 13, color: textWhite, fontWeight: 500, marginTop: 12 }}>Arraste o Excel (.xlsx)</div><div style={{ fontSize: 11, color: textMuted, marginTop: 4 }}>Para DARF {tipoRendimento}</div></div>}
+              : !tipoRendimento ? <div style={{ color: '#f87171' }}><div style={{ fontSize: 24 }}>⚠️</div><div style={{ fontSize: 13, fontWeight: 600, marginTop: 10 }}>BLOQUEADO: Volte ao Passo 2</div><div style={{ fontSize: 11, marginTop: 4 }}>Você precisa selecionar o código antes de importar.</div></div>
+                : file ? <div><div style={{ fontSize: 24 }}>📊</div><div style={{ fontSize: 13, fontWeight: 500, color: '#4ade80', marginTop: 10 }}>{file.name}</div><div style={{ fontSize: 11, color: textMuted, marginTop: 4 }}>{bens.length} cadastros listados</div></div>
+                  : <div><div style={{ fontSize: 32, color: '#3a445c' }}>📁</div><div style={{ fontSize: 13, color: textWhite, fontWeight: 500, marginTop: 12 }}>Arraste o Excel (.xlsx)</div><div style={{ fontSize: 11, color: textMuted, marginTop: 4 }}>Para DARF {tipoRendimento}</div></div>}
           </div>
           <div style={{ display: 'flex', justifyContent: 'center', marginTop: -12, marginBottom: 24 }}>
-            <button onClick={() => baixarModeloExcel(tipoRendimento)} style={{ ...S.bs, fontSize: 11, padding: '6px 16px', color: '#4ade80', borderColor: 'rgba(74, 222, 128, 0.3)' }}>⭳ Baixar Planilha Modelo (Excel)</button>
+            <button onClick={() => tipoRendimento ? baixarModeloExcel(tipoRendimento) : alert('Selecione o código no Passo 2 primeiro')} style={{ ...S.bs, fontSize: 11, padding: '6px 16px', color: '#4ade80', borderColor: 'rgba(74, 222, 128, 0.3)' }}>⭳ Baixar Planilha Modelo (Excel)</button>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
             <button onClick={() => setStep(2)} style={S.bs}>Voltar</button>
