@@ -44,36 +44,15 @@ export const fmtCNPJ = (c) => { const d = String(c).replace(/\D/g, ''); return d
 export const MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
 
 export const TIPOS_RENDIMENTO = {
-  '3208': {
-    codigo: '3208',
-    titulo: 'Aluguéis e Royalties',
-    natureza: '13002 - Aluguéis e royalties pagos a pessoa física',
-    descInfo: 'Natureza 13002 · Aluguel PF · IN RFB 2.060/2021',
-  },
-  '0588': {
-    codigo: '0588',
-    titulo: 'Trabalho sem Vínculo Empregatício',
-    natureza: '10004 - Rendimento do trabalho sem vínculo empregatício',
-    descInfo: 'Natureza 10004 · Trabalho s/ Vínculo · IN RFB 2.060/2021',
-  },
-  '0561': {
-    codigo: '0561',
-    titulo: 'Rendimento do Trabalho Assalariado',
-    natureza: '10001 - Rendimento do trabalho assalariado',
-    descInfo: 'Natureza 10001 · Assalariado · IN RFB 2.060/2021',
-  },
-  '1708': {
-    codigo: '1708',
-    titulo: 'Serviços Prestados por Jurídicas',
-    natureza: '13005 - Remuneração de serviços profissionais',
-    descInfo: 'Natureza 13005 · Serviços Profissionais · IN RFB 2.060/2021',
-  },
-  '8045': {
-    codigo: '8045',
-    titulo: 'Comissões e Corretagens',
-    natureza: '13008 - Comissões e corretagens',
-    descInfo: 'Natureza 13008 · Comissões · IN RFB 2.060/2021',
-  }
+  '3208': { codigo: '3208', titulo: 'Aluguéis e Royalties', natureza: '13002 - Aluguéis PF', descInfo: '13002 (Aluguel PF) • 3208' },
+  '3288': { codigo: '3288', titulo: 'Aluguéis (Código Alternativo)', natureza: '13002 - Aluguéis PF', descInfo: '13002 (Aluguel PF) • 3288' },
+  '0588': { codigo: '0588', titulo: 'Rendimento Trabalho s/ Vínculo', natureza: '10004 - Trabalho s/ Vínculo', descInfo: '10004 (Autônomo) • 0588' },
+  '0561': { codigo: '0561', titulo: 'Trabalho Assalariado', natureza: '10001 - Trabalho Assalariado', descInfo: '10001 (CLT) • 0561' },
+  '1708': { codigo: '1708', titulo: 'Serviços Profissionais (R-4010)', natureza: '13005 - Serviços Profissionais', descInfo: '13005 (Serviços) • 1708' },
+  '8045': { codigo: '8045', titulo: 'Comissões e Corretagens (R-4010)', natureza: '13008 - Comissões PF', descInfo: '13008 (Comissões) • 8045' },
+  '12001': { codigo: '---', titulo: 'Lucros e Dividendos (Isento)', natureza: '12001 - Lucros e Dividendos', descInfo: '12001 (Isento) • S/ Retenção' },
+  '10002': { codigo: '0561', titulo: 'Aposentadoria / Pensão', natureza: '10002 - Aposentadoria', descInfo: '10002 (Aposent.) • 0561' },
+  '13001': { codigo: '0924', titulo: 'Prêmios e Sorteios', natureza: '13001 - Prêmios', descInfo: '13001 (Prêmios) • 0924' }
 };
 
 // ═══ BANCO INTERNO CNPJ ═══
@@ -528,4 +507,41 @@ export async function baixarModeloExcel(tipoRendimento = '3208') {
 
   XLSX.utils.book_append_sheet(wb, ws, "ModeloImportacao");
   XLSX.writeFile(wb, `Modelo_Importacao_${config.codigo}.xlsx`);
+}
+
+// ═══ EXPORTAR CSV PARA FOLHA ═══
+export function exportToCSV(fp, beneficiarios, tipoRendimento) {
+  const config = TIPOS_RENDIMENTO[tipoRendimento] || { codigo: '0000', natureza: 'N/A' };
+  const headers = ['CNPJ_FONTE', 'RAZAO_SOCIAL_FONTE', 'ANOCALENDARIO', 'CPF_BENEFICIARIO', 'NOME_BENEFICIARIO', 'MES', 'VALOR_BRUTO', 'VALOR_IRRF', 'NATUREZA_REINF', 'COD_RECEITA'];
+  const lines = [headers.join(';')];
+
+  beneficiarios.forEach(b => {
+    b.rend.forEach((val, i) => {
+      if (val > 0 || b.irrf[i] > 0) {
+        const row = [
+          String(b.cnpjFonte || fp.cnpj).replace(/\D/g, ''),
+          (b.nomeFonte || fp.nome).replace(/;/g, ' '),
+          fp.anoCalendario,
+          b.cpf.replace(/\D/g, ''),
+          b.nome.replace(/;/g, ' '),
+          (i + 1).toString().padStart(2, '0'),
+          val.toFixed(2).replace('.', ','),
+          b.irrf[i].toFixed(2).replace('.', ','),
+          config.natureza.split(' - ')[0],
+          config.codigo
+        ];
+        lines.push(row.join(';'));
+      }
+    });
+  });
+
+  const csv = lines.join('\n');
+  const blob = new Blob(["\ufeff" + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `EXPORT_FOLHA_${tipoRendimento}_${fp.anoCalendario}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
 }

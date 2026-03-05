@@ -4,7 +4,7 @@ import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import {
   validarCNPJ, validarCPF, fmtMoeda, fmtCPF, fmtCNPJ,
-  MESES, TIPOS_RENDIMENTO, CNPJ_DB, parseExcel, gerarPDF, downloadPDF, fetchCNPJ, gerarDARF, baixarModeloExcel
+  MESES, TIPOS_RENDIMENTO, CNPJ_DB, parseExcel, gerarPDF, downloadPDF, fetchCNPJ, gerarDARF, baixarModeloExcel, exportToCSV
 } from '../utils/informeUtils';
 
 export default function InformeApp() {
@@ -223,7 +223,7 @@ export default function InformeApp() {
           <div style={{ width: 44, height: 44, borderRadius: 10, background: '#1d4ed8', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 800, color: '#fff', boxShadow: '0 0 15px rgba(29,78,216,0.3)' }}>SP</div>
           <div>
             <h1 style={{ margin: 0, fontSize: 18, fontWeight: 700, letterSpacing: '-0.5px' }}>Contábil <span style={{ fontWeight: 400, marginLeft: 8, opacity: 0.9 }}>Gerador de Informe de Rendimentos</span></h1>
-            <p style={{ margin: 0, fontSize: 11, color: textMuted, marginTop: 4, letterSpacing: '0.5px' }}>EFD-REINF • R-4010 • IN RFB 2.060/2021 <span style={{ fontSize: 10, color: '#4ade80', marginLeft: 12 }}>v1.2.0</span></p>
+            <p style={{ margin: 0, fontSize: 11, color: textMuted, marginTop: 4, letterSpacing: '0.5px' }}>EFD-REINF • R-4010 • IN RFB 2.060/2021 <span style={{ fontSize: 10, color: '#4ade80', marginLeft: 12 }}>v1.3.0</span></p>
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
@@ -358,10 +358,16 @@ export default function InformeApp() {
             </div>
           </div>
 
-          <button onClick={() => gen(null)} disabled={busy}
-            style={{ ...S.bp, width: '100%', padding: 14, fontSize: 13, marginBottom: 32 }}>
-            <span style={{ marginRight: 6 }}>📄</span> {busy ? 'Processando...' : `Baixar Relatório Consolidado Master (${bens.length} registros)`}
-          </button>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 32 }}>
+            <button onClick={() => gen(null)} disabled={busy}
+              style={{ ...S.bp, width: '100%', padding: 14, fontSize: 13 }}>
+              <span style={{ marginRight: 6 }}>📄</span> {busy ? 'Processando...' : `Baixar Todos PDFs`}
+            </button>
+            <button onClick={() => exportToCSV(fp, bens.filter(b => filtroCnpj === 'all' || b.cnpjFonte === filtroCnpj), tipoRendimento)} disabled={busy}
+              style={{ ...S.bp, width: '100%', padding: 14, fontSize: 13, background: 'rgba(74,222,128,0.1)', color: '#4ade80', border: '1px solid rgba(74,222,128,0.2)' }}>
+              <span style={{ marginRight: 6 }}>📊</span> Exportar Folha (CSV)
+            </button>
+          </div>
 
           <h3 style={{ fontSize: 11, fontWeight: 500, color: textMuted, margin: '0 0 12px' }}>Downloads Individuais por Beneficiário</h3>
           <div style={{ display: 'grid', gap: 8, marginBottom: 32 }}>
