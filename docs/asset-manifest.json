@@ -1,16 +1,16 @@
 {
   "files": {
-    "main.js": "/informe-rendimentos-app/static/js/main.4c9b7508.js",
+    "main.js": "/informe-rendimentos-app/static/js/main.cb69ec93.js",
     "static/js/239.88a2b237.chunk.js": "/informe-rendimentos-app/static/js/239.88a2b237.chunk.js",
     "static/js/977.0c5e2e38.chunk.js": "/informe-rendimentos-app/static/js/977.0c5e2e38.chunk.js",
     "static/js/455.f1b815a0.chunk.js": "/informe-rendimentos-app/static/js/455.f1b815a0.chunk.js",
     "index.html": "/informe-rendimentos-app/index.html",
-    "main.4c9b7508.js.map": "/informe-rendimentos-app/static/js/main.4c9b7508.js.map",
+    "main.cb69ec93.js.map": "/informe-rendimentos-app/static/js/main.cb69ec93.js.map",
     "239.88a2b237.chunk.js.map": "/informe-rendimentos-app/static/js/239.88a2b237.chunk.js.map",
     "977.0c5e2e38.chunk.js.map": "/informe-rendimentos-app/static/js/977.0c5e2e38.chunk.js.map",
     "455.f1b815a0.chunk.js.map": "/informe-rendimentos-app/static/js/455.f1b815a0.chunk.js.map"
   },
   "entrypoints": [
-    "static/js/main.4c9b7508.js"
+    "static/js/main.cb69ec93.js"
   ]
 }

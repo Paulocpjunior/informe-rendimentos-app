@@ -152,21 +152,22 @@ export default function InformeApp() {
     finally { setBusy(false); }
   };
 
-  // ESTILOS EXATAMENTE IGUAIS AO PRINT
-  const darkBg = '#181d2a';
-  const cardBg = '#222839';
-  const inputBg = '#151928';
-  const textWhite = '#f8fafc';
+  // ESTILOS PREMIUM - SP CONTÁBIL
+  const darkNav = '#0b121f';
+  const mainBg = '#0d1b2a';
+  const cardBg = '#1b2a4a';
+  const inputBg = '#141e33';
+  const textWhite = '#ffffff';
   const textMuted = '#8995a8';
-  const primaryBlue = '#2862f6';
-  const borderCol = '#2a3348';
+  const primaryBlue = '#2a7fff';
+  const borderCol = 'rgba(255,255,255,0.08)';
 
   const S = {
-    card: { background: cardBg, borderRadius: 16, padding: '32px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' },
-    inp: { width: '100%', padding: '12px 16px', fontSize: 13, background: inputBg, border: 'none', borderRadius: 6, color: textWhite, outline: 'none', boxSizing: 'border-box' },
-    bp: { padding: '12px 28px', fontSize: 13, fontWeight: 500, background: primaryBlue, color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', transition: 'background 0.2s', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 },
-    bs: { padding: '8px 16px', fontSize: 12, background: 'transparent', color: textMuted, border: `1px solid ${borderCol}`, borderRadius: 6, cursor: 'pointer', transition: 'all 0.2s' },
-    lb: { display: 'block', fontSize: 11, color: textMuted, marginBottom: 6, fontWeight: 500 }
+    card: { background: cardBg, borderRadius: 20, padding: '40px', boxShadow: '0 20px 40px rgba(0,0,0,0.3)', border: `1px solid ${borderCol}`, position: 'relative' },
+    inp: { width: '100%', padding: '14px 18px', fontSize: 13, background: inputBg, border: `1px solid ${borderCol}`, borderRadius: 8, color: textWhite, outline: 'none', boxSizing: 'border-box', transition: 'all 0.2s' },
+    bp: { padding: '14px 40px', fontSize: 13, fontWeight: 600, background: '#1d4ed8', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', transition: 'all 0.2s', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 },
+    bs: { padding: '8px 20px', fontSize: 12, background: 'transparent', color: textMuted, border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 500 },
+    lb: { display: 'block', fontSize: 12, color: textMuted, marginBottom: 8, fontWeight: 500 }
   };
 
   // Validação de navegação: impede pular passos para frente sem preenchimento
@@ -181,50 +182,59 @@ export default function InformeApp() {
   };
 
   const StepIndicator = ({ current, total, onStepClick, canNavigate }) => (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 40 }}>
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, marginBottom: 60 }}>
       {Array.from({ length: total }).map((_, i) => {
         const n = i + 1;
         const active = n === current;
         const done = n < current;
         const reachable = canNavigate(n);
         return (
-          <div key={n} style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8 }}>
+          <React.Fragment key={n}>
             <div
               onClick={() => reachable && onStepClick(n)}
               style={{
-                width: 28, height: 28, borderRadius: '50%',
-                background: active ? primaryBlue : (done ? 'rgba(74,222,128,0.2)' : 'rgba(255,255,255,0.05)'),
-                border: `1px solid ${active ? primaryBlue : (done ? '#4ade80' : borderCol)}`,
+                width: 32, height: 32, borderRadius: '50%',
+                background: active ? '#1d4ed8' : (done ? 'rgba(74,222,128,0.15)' : 'rgba(255,255,255,0.05)'),
+                border: `1px solid ${active ? '#1d4ed8' : (done ? '#4ade80' : borderCol)}`,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 cursor: reachable ? 'pointer' : 'not-allowed',
-                transition: 'all 0.3s'
+                transition: 'all 0.3s',
+                position: 'relative'
               }}>
-              {done ? <span style={{ color: '#4ade80', fontSize: 14 }}>✓</span> :
-                <span style={{ fontSize: 11, fontWeight: 700, color: active ? textWhite : textMuted }}>{n}</span>}
+              {done ? <span style={{ color: '#4ade80', fontSize: 16 }}>✓</span> :
+                <span style={{ fontSize: 12, fontWeight: 700, color: active ? '#fff' : textMuted }}>{n}</span>}
+
+              {/* Tooltip opcional ou Label */}
+              <span style={{ position: 'absolute', top: 40, fontSize: 10, whiteSpace: 'nowrap', color: active ? textWhite : textMuted, fontWeight: active ? 600 : 400, opacity: active || done ? 1 : 0.5 }}>
+                {n === 1 ? 'Fonte' : n === 2 ? 'Tipo' : n === 3 ? 'Import' : n === 4 ? 'PDFs' : 'DARF'}
+              </span>
             </div>
-            {n < total && <div style={{ flex: 1, height: 2, background: done ? '#4ade80' : borderCol, opacity: 0.3 }} />}
-          </div>
+            {n < total && <div style={{ width: 60, height: 1, background: done ? '#4ade80' : borderCol, opacity: 0.3 }} />}
+          </React.Fragment>
         );
       })}
     </div>
   );
 
   return (
-    <div style={{ minHeight: '100vh', background: '#0a0f1a', color: textWhite, padding: '40px 20px', fontFamily: "'Inter', sans-serif" }}>
-      <div style={{ maxWidth: 900, margin: '0 auto' }}>
-        <header style={{ padding: '0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '40px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-            <div style={{ width: 40, height: 40, borderRadius: 8, background: primaryBlue, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 700, color: '#fff' }}>IR</div>
-            <div>
-              <h1 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: textWhite }}>Gerador de Informe de Rendimentos <span style={{ fontSize: 10, color: '#4ade80', marginLeft: 8, padding: '2px 6px', background: 'rgba(74,222,128,0.1)', borderRadius: 4 }}>v1.1.5</span></h1>
-              <p style={{ margin: 0, fontSize: 11, color: textMuted, marginTop: 2 }}>{TIPOS_RENDIMENTO[tipoRendimento]?.descInfo || 'Selecione o código no Passo 2'}</p>
-            </div>
+    <div style={{ minHeight: '100vh', background: mainBg, color: textWhite, padding: '0', fontFamily: "'Inter', sans-serif" }}>
+      <header style={{ background: darkNav, padding: '20px 60px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: `1px solid ${borderCol}` }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+          <div style={{ width: 44, height: 44, borderRadius: 10, background: '#1d4ed8', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 800, color: '#fff', boxShadow: '0 0 15px rgba(29,78,216,0.3)' }}>SP</div>
+          <div>
+            <h1 style={{ margin: 0, fontSize: 18, fontWeight: 700, letterSpacing: '-0.5px' }}>Contábil <span style={{ fontWeight: 400, marginLeft: 8, opacity: 0.9 }}>Gerador de Informe de Rendimentos</span></h1>
+            <p style={{ margin: 0, fontSize: 11, color: textMuted, marginTop: 4, letterSpacing: '0.5px' }}>EFD-REINF • R-4010 • IN RFB 2.060/2021 <span style={{ fontSize: 10, color: '#4ade80', marginLeft: 12 }}>v1.2.0</span></p>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-            <span style={{ fontSize: 12, color: textMuted }}>{user.email}</span>
-            <button onClick={logout} style={{ ...S.bs, padding: '6px 14px', fontSize: 11 }}>Sair</button>
-          </div>
-        </header>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
+          <span style={{ fontSize: 13, color: textMuted, borderRight: `1px solid ${borderCol}`, paddingRight: 24 }}>{user.email}</span>
+          <button onClick={logout} style={{ background: 'rgba(255,255,255,0.05)', color: textWhite, border: `1px solid ${borderCol}`, padding: '8px 18px', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span>🚪</span> Sair
+          </button>
+        </div>
+      </header>
+
+      <div style={{ maxWidth: 1000, margin: '60px auto', padding: '0 20px' }}>
 
         <StepIndicator
           current={step}
@@ -259,42 +269,29 @@ export default function InformeApp() {
         </div>}
 
         {step === 2 && <div style={S.card}>
-          <h2 style={{ fontSize: 14, fontWeight: 600, color: textWhite, margin: '0 0 16px' }}>Selecione o Tipo de Rendimento</h2>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 10, marginBottom: 32, maxHeight: '300px', overflowY: 'auto', paddingRight: '8px' }}>
-            {Object.keys(TIPOS_RENDIMENTO).map(k => {
-              const r = TIPOS_RENDIMENTO[k];
-              const isSel = tipoRendimento === k;
-              return (
-                <div key={k} onClick={() => setTipoRendimento(k)}
-                  className="revenue-card"
-                  style={{
-                    padding: '18px', borderRadius: 12, cursor: 'pointer',
-                    background: isSel ? 'rgba(40,98,246,0.15)' : inputBg,
-                    border: `1px solid ${isSel ? primaryBlue : borderCol}`,
-                    display: 'flex', alignItems: 'center', gap: 16,
-                    transform: isSel ? 'scale(1.02)' : 'scale(1)',
-                    transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
-                    boxShadow: isSel ? `0 0 20px rgba(40,98,246,0.2)` : 'none'
-                  }}>
-                  <div style={{
-                    width: 24, height: 24, borderRadius: '50%',
-                    border: `2px solid ${isSel ? primaryBlue : borderCol}`,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    background: isSel ? primaryBlue : 'transparent'
-                  }}>
-                    {isSel && <div style={{ width: 10, height: 10, borderRadius: '50%', background: textWhite }} />}
-                  </div>
-                  <div style={{ flex: 1, textAlign: 'left' }}>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: textWhite }}>{r.titulo} (Cód. {r.codigo})</div>
-                    <div style={{ fontSize: 10, color: textMuted }}>{r.natureza}</div>
-                  </div>
-                </div>
-              );
-            })}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+            <div>
+              <h2 style={{ fontSize: 22, fontWeight: 700, color: textWhite, margin: 0 }}>Tipo de Rendimento</h2>
+              <p style={{ fontSize: 13, color: textMuted, margin: '8px 0 0' }}>Selecione a Natureza do Rendimento</p>
+            </div>
+            <button onClick={() => setStep(1)} style={S.bs}>{'<'} Voltar</button>
           </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <button onClick={() => setStep(bens.length > 0 ? 3 : 1)} style={S.bs}>Voltar</button>
-            <button onClick={() => setStep(3)} style={S.bp} disabled={!tipoRendimento}>Continuar {'>'}</button>
+
+          <div style={{ marginBottom: 40 }}>
+            <select
+              value={tipoRendimento}
+              onChange={e => setTipoRendimento(e.target.value)}
+              style={{ ...S.inp, padding: '18px', fontSize: 15, cursor: 'pointer', appearance: 'none', background: `${inputBg} url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%238995a8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E") no-repeat right 16px center` }}
+            >
+              <option value="">Selecione uma opção...</option>
+              {Object.keys(TIPOS_RENDIMENTO).map(k => (
+                <option key={k} value={k}>{TIPOS_RENDIMENTO[k].titulo} (Cód. {TIPOS_RENDIMENTO[k].codigo})</option>
+              ))}
+            </select>
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+            <button onClick={() => setStep(3)} style={S.bp} disabled={!tipoRendimento}>Continuar {' >'}</button>
           </div>
         </div>}
 
