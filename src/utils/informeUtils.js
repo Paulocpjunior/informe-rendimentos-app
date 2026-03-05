@@ -40,9 +40,23 @@ export const fmtMoeda = (v) => (Number(v) || 0).toLocaleString('pt-BR', { minimu
 export const fmtCPF = (c) => { const d = String(c).replace(/\D/g, ''); return d.length === 11 ? `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}` : c; };
 export const fmtCNPJ = (c) => { const d = String(c).replace(/\D/g, ''); return d.length === 14 ? `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8, 12)}-${d.slice(12)}` : c; };
 
-// ═══ MESES ═══
+// ═══ MESES & RENDIMENTOS ═══
 export const MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
-export const NATUREZA = '13002 - Aluguéis e royalties pagos a pessoa física';
+
+export const TIPOS_RENDIMENTO = {
+  '3208': {
+    codigo: '3208',
+    titulo: 'Aluguéis e Royalties',
+    natureza: '13002 - Aluguéis e royalties pagos a pessoa física',
+    descInfo: 'Natureza 13002 · Aluguel PF · IN RFB 2.060/2021',
+  },
+  '0588': {
+    codigo: '0588',
+    titulo: 'Trabalho sem Vínculo Empregatício',
+    natureza: '10004 - Rendimento do trabalho sem vínculo empregatício',
+    descInfo: 'Natureza 10004 · Trabalho s/ Vínculo · IN RFB 2.060/2021',
+  }
+};
 
 // ═══ BANCO INTERNO CNPJ ═══
 export const CNPJ_DB = {
@@ -92,53 +106,64 @@ export async function parseExcel(file) {
   const XLSX = window.XLSX;
   const buf = await file.arrayBuffer();
   const wb = XLSX.read(buf, { type: 'array', cellDates: true });
-  const ws = wb.Sheets[wb.SheetNames[0]];
-  const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
 
-  let cnpjFonte = '';
   const benefMap = {};
+  const cnpjsEncontrados = new Set();
+  let primeiroCnpj = '';
 
-  for (let i = 0; i < rows.length; i++) {
-    const row = rows[i];
-    if (!row || row.length < 8) continue;
-    const nome = row[3];
-    if (!nome || String(nome).trim() === '') continue;
-    const ns = String(nome);
-    if (ns.indexOf('Nome') >= 0 && ns.indexOf('Propriet') >= 0) continue;
-    const br = Number(row[6]);
-    if (isNaN(br)) continue;
+  for (let sIdx = 0; sIdx < wb.SheetNames.length; sIdx++) {
+    const ws = wb.Sheets[wb.SheetNames[sIdx]];
+    const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
 
-    // CNPJ fonte da primeira linha válida
-    if (!cnpjFonte && row[1]) {
-      const c = String(row[1]).replace(/\D/g, '');
-      if (c.length >= 14) cnpjFonte = c.slice(0, 14);
+    let cnpjFonteSheet = '';
+
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      if (!row || row.length < 8) continue;
+      const nome = row[2]; // Coluna C (Índice 2) - Nome
+      if (!nome || String(nome).trim() === '') continue;
+      const ns = String(nome);
+      if (ns.indexOf('Nome') >= 0 && ns.indexOf('Propriet') >= 0) continue;
+      // Removendo linha 'const br = Number(row[6])' que não é mais necessária aqui
+
+      if (!cnpjFonteSheet && row[1]) {
+        const c = String(row[1]).replace(/\D/g, '');
+        if (c.length >= 14) cnpjFonteSheet = c.slice(0, 14);
+      }
+
+      if (cnpjFonteSheet) {
+        cnpjsEncontrados.add(cnpjFonteSheet);
+        if (!primeiroCnpj) primeiroCnpj = cnpjFonteSheet;
+      }
+
+      // Mês da apuração
+      let mesIdx = null;
+      const ap = row[4]; // Coluna E (Índice 4) - Data/Apuração
+      if (ap instanceof Date) mesIdx = ap.getMonth();
+      else if (typeof ap === 'number') mesIdx = new Date((ap - 25569) * 86400000).getMonth();
+      else if (ap) {
+        const s = String(ap);
+        let m = s.match(/(\d{4})-(\d{2})/);
+        if (m) mesIdx = parseInt(m[2], 10) - 1;
+        if (mesIdx === null) { m = s.match(/(\d{2})\/(\d{4})/); if (m) mesIdx = parseInt(m[1], 10) - 1; }
+      }
+      if (mesIdx === null || mesIdx < 0 || mesIdx > 11) continue;
+
+      // Agrupar por nome, CPF e CNPJ da Fonte
+      const key = `${ns.trim().toUpperCase()}|${cnpjFonteSheet}`;
+      if (!benefMap[key]) {
+        benefMap[key] = {
+          nome: ns.trim().toUpperCase(),
+          cpf: String(row[3]).replace(/\D/g, '').slice(0, 11), // Coluna D (Índice 3) - CPF
+          rend: Array(12).fill(0),
+          irrf: Array(12).fill(0),
+          cnpjFonte: cnpjFonteSheet,
+          sheetName: wb.SheetNames[sIdx]
+        };
+      }
+      benefMap[key].rend[mesIdx] += Number(row[5]) || 0; // Coluna F (Índice 5) - Bruto
+      benefMap[key].irrf[mesIdx] += Number(row[6]) || 0; // Coluna G (Índice 6) - IRRF
     }
-
-    // Mês da apuração
-    let mesIdx = null;
-    const ap = row[5];
-    if (ap instanceof Date) mesIdx = ap.getMonth();
-    else if (typeof ap === 'number') mesIdx = new Date((ap - 25569) * 86400000).getMonth();
-    else if (ap) {
-      const s = String(ap);
-      let m = s.match(/(\d{4})-(\d{2})/);
-      if (m) mesIdx = parseInt(m[2], 10) - 1;
-      if (mesIdx === null) { m = s.match(/(\d{2})\/(\d{4})/); if (m) mesIdx = parseInt(m[1], 10) - 1; }
-    }
-    if (mesIdx === null || mesIdx < 0 || mesIdx > 11) continue;
-
-    // Agrupar por nome, CPF da primeira ocorrência
-    const key = ns.trim().toUpperCase();
-    if (!benefMap[key]) {
-      benefMap[key] = {
-        nome: key,
-        cpf: String(row[4]).replace(/\D/g, '').slice(0, 11),
-        rend: Array(12).fill(0),
-        irrf: Array(12).fill(0)
-      };
-    }
-    benefMap[key].rend[mesIdx] += br;
-    benefMap[key].irrf[mesIdx] += Number(row[7]) || 0;
   }
 
   const beneficiarios = Object.values(benefMap).map(b => ({
@@ -148,14 +173,15 @@ export async function parseExcel(file) {
     totalIRRF: b.irrf.reduce((a, c) => a + c, 0)
   }));
 
-  return { cnpjFonte, beneficiarios };
+  return { cnpjFonte: primeiroCnpj, cnpjsUnicos: Array.from(cnpjsEncontrados), beneficiarios };
 }
 
 // ═══ GERAR PDF ═══
-export async function gerarPDF(fp, beneficiarios, idx) {
+export async function gerarPDF(fp, beneficiarios, idx, tipoRendimento = '3208') {
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
   const pw = 210, ml = 15, cw = 180;
   const list = idx != null ? [beneficiarios[idx]] : beneficiarios;
+  const config = TIPOS_RENDIMENTO[tipoRendimento] || TIPOS_RENDIMENTO['3208'];
 
   list.forEach((b, i) => {
     if (i > 0) doc.addPage();
@@ -167,7 +193,7 @@ export async function gerarPDF(fp, beneficiarios, idx) {
     doc.text('COMPROVANTE DE RENDIMENTOS PAGOS E DE', pw / 2, y + 6.5, { align: 'center' });
     doc.text('IMPOSTO SOBRE A RENDA RETIDO NA FONTE', pw / 2, y + 11.5, { align: 'center' });
     doc.setFontSize(7); doc.setFont('helvetica', 'normal');
-    doc.text('IN RFB nº 2.060/2021 · Natureza: ' + NATUREZA, pw / 2, y + 17, { align: 'center' });
+    doc.text(config.descInfo, pw / 2, y + 17, { align: 'center' });
     y += 22;
 
     // Exercício
@@ -189,12 +215,12 @@ export async function gerarPDF(fp, beneficiarios, idx) {
     doc.setTextColor(100); doc.setFontSize(6.5); doc.setFont('helvetica', 'normal');
     doc.text('CNPJ / CPF', ml + 2.5, y + 3.5);
     doc.setTextColor(0); doc.setFontSize(10); doc.setFont('helvetica', 'bold');
-    doc.text(fmtCNPJ(fp.cnpj), ml + 2.5, y + 8); y += 10;
+    doc.text(fmtCNPJ(b.cnpjFonte || fp.cnpj), ml + 2.5, y + 8); y += 10;
     doc.rect(ml, y, cw, 10, 'S');
     doc.setTextColor(100); doc.setFontSize(6.5); doc.setFont('helvetica', 'normal');
     doc.text('RAZÃO SOCIAL / NOME', ml + 2.5, y + 3.5);
     doc.setTextColor(0); doc.setFontSize(9); doc.setFont('helvetica', 'bold');
-    doc.text(fp.nome, ml + 2.5, y + 8); y += 12.5;
+    doc.text(b.nomeFonte || fp.nome, ml + 2.5, y + 8); y += 12.5;
 
     // Seção 2 - Beneficiário
     doc.setFillColor(43, 76, 126); doc.rect(ml, y, cw, 7, 'F');
@@ -210,7 +236,7 @@ export async function gerarPDF(fp, beneficiarios, idx) {
     doc.setTextColor(100); doc.setFontSize(6.5); doc.setFont('helvetica', 'normal');
     doc.text('NATUREZA DO RENDIMENTO', ml + cW + 2.5, y + 3.5);
     doc.setTextColor(0); doc.setFontSize(7.5); doc.setFont('helvetica', 'bold');
-    doc.text(NATUREZA, ml + cW + 2.5, y + 8); y += 10;
+    doc.text(config.natureza, ml + cW + 2.5, y + 8); y += 10;
     doc.rect(ml, y, cw, 10, 'S');
     doc.setTextColor(100); doc.setFontSize(6.5); doc.setFont('helvetica', 'normal');
     doc.text('NOME COMPLETO', ml + 2.5, y + 3.5);
@@ -318,102 +344,116 @@ export function mod10Arrecadacao(valor) {
 }
 
 // ═══ GERAR DARF PDF ═══
-export async function gerarDARF(fp, beneficiarios, dataVencimento) {
+export async function gerarDARF(fp, beneficiarios, dataVencimento, tipoRendimento = '3208') {
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
   const pw = 210;
+  const config = TIPOS_RENDIMENTO[tipoRendimento] || TIPOS_RENDIMENTO['3208'];
 
-  const totalPrincipal = beneficiarios.reduce((acc, b) => acc + b.totalIRRF, 0);
-
-  // Layout Básico DARF Preto e Branco
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(14);
-  doc.text('MINISTÉRIO DA FAZENDA', pw / 2, 20, { align: 'center' });
-  doc.text('SECRETARIA DA RECEITA FEDERAL', pw / 2, 26, { align: 'center' });
-  doc.text('Documento de Arrecadação de Receitas Federais', pw / 2, 32, { align: 'center' });
-  doc.text('DARF', pw / 2, 38, { align: 'center' });
-
-  doc.setFontSize(10);
-  doc.setLineWidth(0.3);
-  doc.rect(20, 50, 170, 100);
-
-  doc.line(90, 50, 90, 150);
-
-  doc.setFont('helvetica', 'normal');
-  doc.text('01 NOME / TELEFONE', 22, 55);
-  doc.setFont('helvetica', 'bold');
-  const nomeSplit = doc.splitTextToSize(fp.nome, 65);
-  doc.text(nomeSplit, 22, 62);
-
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8);
-  const infoExtra = 'Este documento de apoio foi gerado pelo software Auxiliar\nde Informes. O código de barras obrigatoriamente deve\nser gerado nativamente no portal do SicalcWeb Federal\nou via e-CAC para processamento de juros e multas atuais.';
-  const infoLines = doc.splitTextToSize(infoExtra, 65);
-  doc.text(infoLines, 22, 120);
-
-  const rightX = 90;
-  const rw = 100;
-
-  const fields = [
-    { label: '02 PERÍODO DE APURAÇÃO', value: `31/12/${fp.anoCalendario}` },
-    { label: '03 NÚMERO DO CPF OU CNPJ', value: fmtCNPJ(fp.cnpj) },
-    { label: '04 CÓDIGO DA RECEITA', value: '3208' },
-    { label: '05 NÚMERO DE REFERÊNCIA', value: '' },
-    { label: '06 DATA DE VENCIMENTO', value: dataVencimento || `20/01/${parseInt(fp.anoCalendario) + 1}` },
-    { label: '07 VALOR DO PRINCIPAL', value: fmtMoeda(totalPrincipal) },
-    { label: '08 VALOR DA MULTA', value: '0,00' },
-    { label: '09 VALOR DOS JUROS E / OU ENCARGOS', value: '0,00' },
-    { label: '10 VALOR TOTAL', value: fmtMoeda(totalPrincipal) }
-  ];
-
-  let currentY = 50;
-  fields.forEach((f, i) => {
-    doc.rect(rightX, currentY, rw, 11);
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(7);
-    doc.text(f.label, rightX + 2, currentY + 4);
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(11);
-    doc.text(f.value, rightX + rw - 2, currentY + 9, { align: 'right' });
-    currentY += 11;
+  // Agrupar beneficiarios por CNPJ fonte
+  const groups = {};
+  beneficiarios.forEach(b => {
+    const key = b.cnpjFonte || fp.cnpj;
+    if (!groups[key]) groups[key] = { cnpj: key, nome: b.nomeFonte || fp.nome, totalIRRF: 0 };
+    groups[key].totalIRRF += b.totalIRRF;
   });
 
-  // ========== GERAR CÓDIGO DE BARRAS FEBRABAN ARRECADAÇÃO ==========
-  // 1-3: "856" (Arrecadação / Gov / Mod10)
-  // 4: DV Geral (calculado depois)
-  // 5-15: Valor
-  const vlCents = Math.round(totalPrincipal * 100).toString().padStart(11, '0');
-  const org = "0000"; // Orgão/Governo Genérico
-  const cnpjClean = fp.cnpj.replace(/\D/g, '').padEnd(14, '0');
-  const codRec = "3208";
-  const periodo = `12${fp.anoCalendario}`; // MMAAAA
-  let refLivre = (cnpjClean + codRec + periodo).padEnd(25, '0').slice(0, 25);
+  const cnpjs = Object.values(groups);
 
-  let barrasSemDV = "856" + vlCents + org + refLivre;
-  const dvGeral = mod10Arrecadacao(barrasSemDV);
-  const barrasFinal = "856" + dvGeral + vlCents + org + refLivre;
+  cnpjs.forEach((group, idx) => {
+    if (idx > 0) doc.addPage();
+    const totalPrincipal = group.totalIRRF;
 
-  // Format Linha Digitavel (4 Blocos de 11 + DV bloco)
-  let linhaDigitavel = "";
-  for (let b = 0; b < 4; b++) {
-    const bloco = barrasFinal.substr(b * 11, 11);
-    const dvBloco = mod10Arrecadacao(bloco);
-    linhaDigitavel += bloco + "-" + dvBloco + (b < 3 ? " " : "");
-  }
+    // Layout Básico DARF Preto e Branco
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(14);
+    doc.text('MINISTÉRIO DA FAZENDA', pw / 2, 20, { align: 'center' });
+    doc.text('SECRETARIA DA RECEITA FEDERAL', pw / 2, 26, { align: 'center' });
+    doc.text('Documento de Arrecadação de Receitas Federais', pw / 2, 32, { align: 'center' });
+    doc.text('DARF', pw / 2, 38, { align: 'center' });
 
-  // Desenhar a linha e barras no final
-  doc.setFontSize(11);
-  doc.text(linhaDigitavel, rightX + rw / 2, currentY + 16, { align: 'center' });
+    doc.setFontSize(10);
+    doc.setLineWidth(0.3);
+    doc.rect(20, 50, 170, 100);
 
-  // Render Barcode
-  try {
-    const canvas = document.createElement("canvas");
-    JsBarcode(canvas, barrasFinal, { format: "ITF", displayValue: false, margin: 0, height: 50, width: 2 });
-    const imgData = canvas.toDataURL("image/png");
-    doc.addImage(imgData, 'PNG', rightX + 5, currentY + 20, rw - 10, 16);
-  } catch (err) {
-    doc.setFontSize(9);
-    doc.text("(Erro ao gerar barras)", rightX + rw / 2, currentY + 25, { align: 'center' });
-  }
+    doc.line(90, 50, 90, 150);
+
+    doc.setFont('helvetica', 'normal');
+    doc.text('01 NOME / TELEFONE', 22, 55);
+    doc.setFont('helvetica', 'bold');
+    const nomeSplit = doc.splitTextToSize(group.nome, 65);
+    doc.text(nomeSplit, 22, 62);
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    const infoExtra = 'Este documento de apoio foi gerado pelo software Auxiliar\nde Informes. O código de barras obrigatoriamente deve\nser gerado nativamente no portal do SicalcWeb Federal\nou via e-CAC para processamento de juros e multas atuais.';
+    const infoLines = doc.splitTextToSize(infoExtra, 65);
+    doc.text(infoLines, 22, 120);
+
+    const rightX = 90;
+    const rw = 100;
+
+    const fields = [
+      { label: '02 PERÍODO DE APURAÇÃO', value: `31/12/${fp.anoCalendario}` },
+      { label: '03 NÚMERO DO CPF OU CNPJ', value: fmtCNPJ(group.cnpj) },
+      { label: '04 CÓDIGO DA RECEITA', value: config.codigo },
+      { label: '05 NÚMERO DE REFERÊNCIA', value: '' },
+      { label: '06 DATA DE VENCIMENTO', value: dataVencimento || `20/01/${parseInt(fp.anoCalendario) + 1}` },
+      { label: '07 VALOR DO PRINCIPAL', value: fmtMoeda(totalPrincipal) },
+      { label: '08 VALOR DA MULTA', value: '0,00' },
+      { label: '09 VALOR DOS JUROS E / OU ENCARGOS', value: '0,00' },
+      { label: '10 VALOR TOTAL', value: fmtMoeda(totalPrincipal) }
+    ];
+
+    let currentY = 50;
+    fields.forEach((f, i) => {
+      doc.rect(rightX, currentY, rw, 11);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(7);
+      doc.text(f.label, rightX + 2, currentY + 4);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(11);
+      doc.text(f.value, rightX + rw - 2, currentY + 9, { align: 'right' });
+      currentY += 11;
+    });
+
+    // ========== GERAR CÓDIGO DE BARRAS FEBRABAN ARRECADAÇÃO ==========
+    // 1-3: "856" (Arrecadação / Gov / Mod10)
+    // 4: DV Geral (calculado depois)
+    // 5-15: Valor
+    const vlCents = Math.round(totalPrincipal * 100).toString().padStart(11, '0');
+    const org = "0000"; // Orgão/Governo Genérico
+    const cnpjClean = group.cnpj.replace(/\D/g, '').padEnd(14, '0');
+    const codRec = config.codigo;
+    const periodo = `12${fp.anoCalendario}`; // MMAAAA
+    let refLivre = (cnpjClean + codRec + periodo).padEnd(25, '0').slice(0, 25);
+
+    let barrasSemDV = "856" + vlCents + org + refLivre;
+    const dvGeral = mod10Arrecadacao(barrasSemDV);
+    const barrasFinal = "856" + dvGeral + vlCents + org + refLivre;
+
+    // Format Linha Digitavel (4 Blocos de 11 + DV bloco)
+    let linhaDigitavel = "";
+    for (let b = 0; b < 4; b++) {
+      const bloco = barrasFinal.substr(b * 11, 11);
+      const dvBloco = mod10Arrecadacao(bloco);
+      linhaDigitavel += bloco + "-" + dvBloco + (b < 3 ? " " : "");
+    }
+
+    // Desenhar a linha e barras no final
+    doc.setFontSize(11);
+    doc.text(linhaDigitavel, rightX + rw / 2, currentY + 16, { align: 'center' });
+
+    // Render Barcode
+    try {
+      const canvas = document.createElement("canvas");
+      JsBarcode(canvas, barrasFinal, { format: "ITF", displayValue: false, margin: 0, height: 50, width: 2 });
+      const imgData = canvas.toDataURL("image/png");
+      doc.addImage(imgData, 'PNG', rightX + 5, currentY + 20, rw - 10, 16);
+    } catch (err) {
+      doc.setFontSize(9);
+      doc.text("(Erro ao gerar barras)", rightX + rw / 2, currentY + 25, { align: 'center' });
+    }
+  });
 
   return doc;
 }
@@ -429,4 +469,34 @@ export function downloadPDF(doc, filename) {
   a.click();
   document.body.removeChild(a);
   setTimeout(() => URL.revokeObjectURL(url), 500);
+}
+
+// ═══ BAIXAR MODELO EXCEL ═══
+export async function baixarModeloExcel(tipoRendimento = '3208') {
+  await loadScript(
+    'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js',
+    () => !!window.XLSX
+  );
+  const XLSX = window.XLSX;
+  const wb = XLSX.utils.book_new();
+
+  const config = TIPOS_RENDIMENTO[tipoRendimento] || TIPOS_RENDIMENTO['3208'];
+
+  const headers = [
+    ["Localidade", "CNPJ", "Nome", "CPF", "Apuração", "Bruto", "IRRF", "Liquido"]
+  ];
+
+  const data = [
+    ["Sede", "17.706.901/0001-04", "Exemplo da Silva", "000.000.000-00", "2025-01-31", 5000.00, 1500.00, 3500.00]
+  ];
+
+  const ws = XLSX.utils.aoa_to_sheet([...headers, ...data]);
+
+  // Style headers slightly
+  ws['!cols'] = [
+    { wch: 15 }, { wch: 18 }, { wch: 30 }, { wch: 18 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 15 }
+  ];
+
+  XLSX.utils.book_append_sheet(wb, ws, "ModeloImportacao");
+  XLSX.writeFile(wb, `Modelo_Importacao_${config.codigo}.xlsx`);
 }

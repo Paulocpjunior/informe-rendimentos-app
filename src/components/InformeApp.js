@@ -4,12 +4,13 @@ import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import {
   validarCNPJ, validarCPF, fmtMoeda, fmtCPF, fmtCNPJ,
-  MESES, NATUREZA, CNPJ_DB, parseExcel, gerarPDF, downloadPDF, fetchCNPJ, gerarDARF
+  MESES, TIPOS_RENDIMENTO, CNPJ_DB, parseExcel, gerarPDF, downloadPDF, fetchCNPJ, gerarDARF, baixarModeloExcel
 } from '../utils/informeUtils';
 
 export default function InformeApp() {
   const { user, logout } = useAuth();
   const [step, setStep] = useState(1);
+  const [tipoRendimento, setTipoRendimento] = useState('3208');
   const [cnpj, setCnpj] = useState('');
   const [cData, setCData] = useState(null);
   const [cVal, setCVal] = useState(null);
@@ -60,10 +61,11 @@ export default function InformeApp() {
 
   const processFile = async (f) => {
     if (!f) return;
-    setFile(f); setBusy(true); setMsg('');
+    setFile(f); setBusy(true); setMsg('Lendo arquivo e processando abas...');
     try {
       const r = await parseExcel(f);
-      setBens(r.beneficiarios);
+      const newBens = [...r.beneficiarios];
+
       if (r.cnpjFonte && !fp.cnpj) {
         setFp(p => ({ ...p, cnpj: r.cnpjFonte }));
         setCnpj(fmtCNPJ(r.cnpjFonte));
@@ -73,8 +75,38 @@ export default function InformeApp() {
           if (dbEntry) setFp(p => ({ ...p, cnpj: r.cnpjFonte, nome: dbEntry.razao_social }));
         }
       }
-      setMsg(`✓ ${r.beneficiarios.length} beneficiário(s) extraídos com sucesso`);
-      setStep(3);
+
+      setMsg('Buscando dados das fontes pagadoras...');
+      const cacheNomes = {};
+      if (fp.cnpj && fp.nome) cacheNomes[fp.cnpj] = fp.nome;
+
+      for (let c of r.cnpjsUnicos) {
+        if (!cacheNomes[c]) {
+          if (CNPJ_DB[c]) {
+            cacheNomes[c] = CNPJ_DB[c].razao_social;
+          } else {
+            const v = validarCNPJ(c);
+            if (v.valid) {
+              const apiData = await fetchCNPJ(c);
+              if (apiData) cacheNomes[c] = apiData.razao_social;
+              else cacheNomes[c] = 'Razão Social Não Encontrada';
+            } else {
+              cacheNomes[c] = 'CNPJ Inválido';
+            }
+          }
+        }
+      }
+
+      newBens.forEach(b => {
+        b.nomeFonte = cacheNomes[b.cnpjFonte] || 'Fonte Pagadora Desconhecida';
+      });
+
+      setBens(newBens);
+
+      const multiStr = r.cnpjsUnicos.length > 1 ? ` de ${r.cnpjsUnicos.length} fontes (abas)` : '';
+      setMsg(`✓ ${r.beneficiarios.length} beneficiário(s) extraídos${multiStr} com sucesso`);
+
+      setStep(4);
     } catch (err) { alert('Erro: ' + err.message); }
     finally { setBusy(false); }
   };
@@ -82,7 +114,7 @@ export default function InformeApp() {
   const gen = async (idx) => {
     setBusy(true); setMsg('');
     try {
-      const doc = await gerarPDF(fp, bens, idx);
+      const doc = await gerarPDF(fp, bens, idx, tipoRendimento);
       const nm = idx != null
         ? `INFORME_${bens[idx].cpf}_${bens[idx].nome.replace(/\s/g, '_').slice(0, 25)}_${fp.anoCalendario}.pdf`
         : `INFORMES_CONSOLIDADO_${fp.anoCalendario}.pdf`;
@@ -127,7 +159,7 @@ export default function InformeApp() {
       <header style={{ padding: '16px 32px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
           <div style={{ width: 40, height: 40, borderRadius: 8, background: primaryBlue, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 700, color: '#fff' }}>IR</div>
-          <div><h1 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: textWhite }}>Gerador de Informe de Rendimentos</h1><p style={{ margin: 0, fontSize: 11, color: textMuted, marginTop: 2 }}>Natureza 13002 · Aluguel PF · IN RFB 2.060/2021</p></div>
+          <div><h1 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: textWhite }}>Gerador de Informe de Rendimentos</h1><p style={{ margin: 0, fontSize: 11, color: textMuted, marginTop: 2 }}>{TIPOS_RENDIMENTO[tipoRendimento]?.descInfo || ''}</p></div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
           <span style={{ fontSize: 12, color: textMuted }}>{user.email}</span>
@@ -151,26 +183,26 @@ export default function InformeApp() {
             let clickStep = 1;
 
             if (it.n === 1) { isCurrent = step === 1; canClick = true; clickStep = 1; }
-            if (it.n === 2) { isCurrent = false; canClick = step >= 1; clickStep = 1; }
-            if (it.n === 3) { isCurrent = step === 2; canClick = fp.nome !== ''; clickStep = 2; }
-            if (it.n === 4) { isCurrent = step === 3; canClick = bens.length > 0; clickStep = 3; }
-            if (it.n === 5) { isCurrent = step === 4; canClick = step >= 3; clickStep = 4; }
+            if (it.n === 2) { isCurrent = step === 2; canClick = fp.nome !== ''; clickStep = 2; }
+            if (it.n === 3) { isCurrent = step === 3; canClick = step >= 2; clickStep = 3; }
+            if (it.n === 4) { isCurrent = step === 4; canClick = bens.length > 0; clickStep = 4; }
+            if (it.n === 5) { isCurrent = step === 5; canClick = step >= 4; clickStep = 5; }
 
             const isActive = isCurrent;
-            const isDone = (step === 2 && it.n < 3) || (step === 3 && it.n < 4) || (step === 4 && it.n < 5);
-            const isOpacity = (it.n === 5 && step < 3) || (it.n === 2) ? 0.4 : 1;
+            const isDone = (it.n < step);
+            const isOpacity = (it.n > step) ? 0.4 : 1;
 
             return (
               <React.Fragment key={it.n}>
                 <div
-                  onClick={() => { if (canClick && it.n !== 5 && it.n !== 2) setStep(clickStep); }}
+                  onClick={() => { if (canClick) setStep(clickStep); }}
                   style={{
                     display: 'flex', alignItems: 'center', gap: 8,
                     background: isActive ? 'rgba(40,98,246,0.15)' : 'transparent',
                     border: isActive ? `1px solid ${primaryBlue}` : `1px solid ${borderCol}`,
                     borderRadius: 30,
                     padding: '6px 16px 6px 6px',
-                    cursor: (canClick && it.n !== 5 && it.n !== 2) ? 'pointer' : 'default',
+                    cursor: canClick ? 'pointer' : 'default',
                     opacity: isOpacity
                   }}>
                   <span style={{
@@ -218,6 +250,34 @@ export default function InformeApp() {
         </div>}
 
         {step === 2 && <div style={S.card}>
+          <h2 style={{ fontSize: 14, fontWeight: 600, color: textWhite, margin: '0 0 16px' }}>Selecione o Tipo de Rendimento</h2>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 32 }}>
+            {Object.keys(TIPOS_RENDIMENTO).map(k => {
+              const r = TIPOS_RENDIMENTO[k];
+              const isSel = tipoRendimento === k;
+              return (
+                <div key={k} onClick={() => setTipoRendimento(k)}
+                  style={{
+                    padding: '24px 16px', borderRadius: 10, cursor: 'pointer',
+                    background: isSel ? 'rgba(40,98,246,0.1)' : inputBg,
+                    border: `1px solid ${isSel ? primaryBlue : borderCol}`,
+                    transition: 'all 0.2s', textAlign: 'center'
+                  }}>
+                  <div style={{ fontSize: 24, marginBottom: 12 }}>{k === '3208' ? '🏠' : '⛪'}</div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: isSel ? '#4ade80' : textWhite, marginBottom: 6 }}>{r.titulo}</div>
+                  <div style={{ fontSize: 11, color: textMuted }}>Cód DARF: {r.codigo}</div>
+                  <div style={{ fontSize: 10, color: textMuted, marginTop: 8 }}>{r.natureza}</div>
+                </div>
+              );
+            })}
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <button onClick={() => setStep(1)} style={S.bs}>Voltar</button>
+            <button onClick={() => setStep(3)} style={S.bp}>Continuar {'>'}</button>
+          </div>
+        </div>}
+
+        {step === 3 && <div style={S.card}>
           <div onClick={() => fR.current && fR.current.click()}
             onDragEnter={e => { e.preventDefault(); setDrag(true); }}
             onDragOver={e => { e.preventDefault(); setDrag(true); }}
@@ -227,21 +287,36 @@ export default function InformeApp() {
             <input ref={fR} type="file" accept=".xlsx,.xls" onChange={e => processFile(e.target.files[0])} style={{ display: 'none' }} />
             {busy ? <div style={{ color: primaryBlue }}><div style={{ fontSize: 24 }}>⏳</div><div style={{ fontSize: 13, fontWeight: 500, marginTop: 10 }}>Lendo arquivo...</div></div>
               : file ? <div><div style={{ fontSize: 24 }}>📊</div><div style={{ fontSize: 13, fontWeight: 500, color: '#4ade80', marginTop: 10 }}>{file.name}</div><div style={{ fontSize: 11, color: textMuted, marginTop: 4 }}>{bens.length} cadastros listados</div></div>
-                : <div><div style={{ fontSize: 32, color: '#3a445c' }}>📁</div><div style={{ fontSize: 13, color: textWhite, fontWeight: 500, marginTop: 12 }}>Arraste o Excel (.xlsx)</div><div style={{ fontSize: 11, color: textMuted, marginTop: 4 }}>Modelo Padronizado IN RFB</div></div>}
+                : <div><div style={{ fontSize: 32, color: '#3a445c' }}>📁</div><div style={{ fontSize: 13, color: textWhite, fontWeight: 500, marginTop: 12 }}>Arraste o Excel (.xlsx)</div><div style={{ fontSize: 11, color: textMuted, marginTop: 4 }}>Para DARF {tipoRendimento}</div></div>}
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'center', marginTop: -12, marginBottom: 24 }}>
+            <button onClick={() => baixarModeloExcel(tipoRendimento)} style={{ ...S.bs, fontSize: 11, padding: '6px 16px', color: '#4ade80', borderColor: 'rgba(74, 222, 128, 0.3)' }}>⭳ Baixar Planilha Modelo (Excel)</button>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <button onClick={() => setStep(1)} style={S.bs}>Voltar</button>
-            <button onClick={() => setStep(3)} style={S.bp} disabled={bens.length === 0}>Processar {'>'}</button>
+            <button onClick={() => setStep(2)} style={S.bs}>Voltar</button>
+            <button onClick={() => setStep(4)} style={S.bp} disabled={bens.length === 0}>Processar {'>'}</button>
           </div>
         </div>}
 
-        {step === 3 && <div style={S.card}>
+        {step === 4 && <div style={S.card}>
           <h2 style={{ fontSize: 14, fontWeight: 600, color: textWhite, margin: '0 0 16px' }}>Resultados Analíticos</h2>
           <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr 1fr', gap: 12, marginBottom: 24 }}>
             <div style={{ padding: '16px', borderRadius: 10, background: inputBg }}>
               <div style={{ fontSize: 10, color: textMuted, marginBottom: 4 }}>Fonte Cadastrada</div>
-              <div style={{ fontSize: 11, fontWeight: 600, color: textWhite, textTransform: 'uppercase', marginBottom: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{fp.nome}</div>
-              <div style={{ fontSize: 10, color: textMuted }}>CNPJ: {fmtCNPJ(fp.cnpj)}</div>
+              <div style={{ fontSize: 11, fontWeight: 600, color: textWhite, textTransform: 'uppercase', marginBottom: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {(() => {
+                  const unicos = new Set(bens.map(b => b.cnpjFonte).filter(Boolean));
+                  if (unicos.size > 1) return `Múltiplas Fontes (${unicos.size})`;
+                  return fp.nome;
+                })()}
+              </div>
+              <div style={{ fontSize: 10, color: textMuted }}>
+                {(() => {
+                  const unicos = new Set(bens.map(b => b.cnpjFonte).filter(Boolean));
+                  if (unicos.size > 1) return 'Diversos CNPJs';
+                  return `CNPJ: ${fmtCNPJ(fp.cnpj)}`;
+                })()}
+              </div>
             </div>
             <div style={{ padding: '16px', borderRadius: 10, background: inputBg }}>
               <div style={{ fontSize: 10, color: textMuted, marginBottom: 6 }}>Base de Cálculo Tributável</div>
@@ -273,18 +348,18 @@ export default function InformeApp() {
             ))}
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <button onClick={() => setStep(2)} style={S.bs}>Voltar</button>
-            <button onClick={() => setStep(4)} style={S.bp}>Avançar para DARF {'>'}</button>
+            <button onClick={() => setStep(3)} style={S.bs}>Voltar</button>
+            <button onClick={() => setStep(5)} style={S.bp}>Avançar para DARF {'>'}</button>
           </div>
         </div>}
 
-        {step === 4 && <div style={S.card}>
+        {step === 5 && <div style={S.card}>
           <h2 style={{ fontSize: 14, fontWeight: 600, color: textWhite, margin: '0 0 16px' }}>Gerar Guia de Arrecadação (DARF)</h2>
           <div style={{ padding: '24px', borderRadius: 10, background: inputBg, border: `1px solid ${borderCol}`, marginBottom: 32 }}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, marginBottom: 20 }}>
               <div>
                 <div style={{ fontSize: 11, color: textMuted, marginBottom: 6 }}>Código da Receita</div>
-                <div style={{ fontSize: 16, fontWeight: 600, color: textWhite }}>3208 - Aluguéis</div>
+                <div style={{ fontSize: 16, fontWeight: 600, color: textWhite }}>{tipoRendimento} - {TIPOS_RENDIMENTO[tipoRendimento]?.titulo || 'Aluguéis'}</div>
               </div>
               <div>
                 <div style={{ fontSize: 11, color: textMuted, marginBottom: 6 }}>Período de Apuração</div>
@@ -306,8 +381,8 @@ export default function InformeApp() {
           <button onClick={async () => {
             setBusy(true);
             try {
-              const doc = await gerarDARF(fp, bens, `20/01/${parseInt(fp.anoCalendario) + 1}`);
-              downloadPDF(doc, `DARF_3208_${fp.anoCalendario}.pdf`);
+              const doc = await gerarDARF(fp, bens, `20/01/${parseInt(fp.anoCalendario) + 1}`, tipoRendimento);
+              downloadPDF(doc, `DARF_${tipoRendimento}_${fp.anoCalendario}.pdf`);
               setMsg('✓ DARF gerado em PDF com sucesso!');
             } catch (e) { alert(e.message); }
             finally { setBusy(false); }
@@ -317,7 +392,7 @@ export default function InformeApp() {
           </button>
 
           <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
-            <button onClick={() => setStep(3)} style={S.bs}>Voltar</button>
+            <button onClick={() => setStep(4)} style={S.bs}>Voltar</button>
           </div>
         </div>}
       </div>
