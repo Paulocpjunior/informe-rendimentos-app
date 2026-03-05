@@ -69,6 +69,12 @@ export default function App() {
   const [bens, setBens] = useState([]); const [busy, setBusy] = useState(false);
   const [links, setLinks] = useState([]); const fR = useRef(null);
 
+  // RESET DE SEGURANÇA
+  useState(() => {
+    setStep(1);
+    setTipo('');
+  }, []);
+
   function processFile(f) {
     setBusy(true); parseXLS(f).then(r => {
       setBens(r.bens);
@@ -81,6 +87,10 @@ export default function App() {
   return (
     <div style={{ minHeight: "100vh", background: "#0d1b2a", color: "#e0e6ed", padding: 20 }}>
       <div style={{ maxWidth: 800, margin: "auto" }}>
+        <div style={{ marginBottom: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h1 style={{ fontSize: 18, fontWeight: 700 }}>Gerador IR <span style={{ fontSize: 10, color: '#4ade80', background: 'rgba(74,222,128,0.1)', padding: '2px 6px', borderRadius: 4 }}>v1.1.2</span></h1>
+          <span style={{ fontSize: 10, color: '#8995a8' }}>{TIPOS_RENDIMENTO[tipo]?.titulo || 'Selecione o código no Passo 2'}</span>
+        </div>
         <div style={{ display: 'flex', gap: 10, marginBottom: 20 }}>
           {[1, 2, 3, 4].map(n => <div key={n} style={{ flex: 1, height: 4, background: step >= n ? "#2a7fff" : "#222" }} />)}
         </div>
