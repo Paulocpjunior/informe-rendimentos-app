@@ -6,17 +6,28 @@ export default function Login() {
   const [senha, setSenha] = useState('');
   const [erro, setErro] = useState('');
   const [load, setLoad] = useState(false);
-  const { login } = useAuth();
+  const [isRegistro, setIsRegistro] = useState(false);
+  const { login, register } = useAuth();
 
-  const handleLogin = async (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setErro(''); setLoad(true);
     try {
-      await login(email, senha);
+      if (isRegistro) {
+        await register(email, senha);
+      } else {
+        await login(email, senha);
+      }
     } catch (err) {
-      setErro('Falha no login: ' + err.message);
+      const msg = isRegistro ? 'Falha no cadastro: ' : 'Falha no login: ';
+      setErro(msg + err.message);
       setLoad(false);
     }
+  };
+
+  const toggleMode = () => {
+    setIsRegistro(!isRegistro);
+    setErro('');
   };
 
   const darkBg = '#0d1117';
@@ -36,7 +47,7 @@ export default function Login() {
         
         {erro && <div style={{ background: 'rgba(248,81,73,0.1)', color: '#ff7b72', padding: 12, borderRadius: 6, fontSize: 13, marginBottom: 24, border: '1px solid rgba(248,81,73,0.4)' }}>{erro}</div>}
         
-        <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div>
             <label style={{ display: 'block', fontSize: 13, color: textWhite, marginBottom: 8, fontWeight: 500 }}>Email Profissional</label>
             <input type="email" required value={email} onChange={e => setEmail(e.target.value)} style={{ width: '100%', padding: '10px 14px', background: inputBg, border: '1px solid #30363d', borderRadius: 6, color: textWhite, outline: 'none', fontSize: 14, boxSizing: 'border-box' }} />
@@ -46,9 +57,22 @@ export default function Login() {
             <input type="password" required value={senha} onChange={e => setSenha(e.target.value)} style={{ width: '100%', padding: '10px 14px', background: inputBg, border: '1px solid #30363d', borderRadius: 6, color: textWhite, outline: 'none', fontSize: 14, boxSizing: 'border-box' }} />
           </div>
           <button type="submit" disabled={load} style={{ marginTop: 8, background: primaryBlue, color: '#fff', border: 'none', padding: 12, borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: load ? 'not-allowed' : 'pointer' }}>
-            {load ? 'Acessando sistema...' : 'Entrar no Sistema'}
+            {load ? (isRegistro ? 'Criando conta...' : 'Acessando sistema...') : (isRegistro ? 'Criar Conta' : 'Entrar no Sistema')}
           </button>
         </form>
+
+        <div style={{ textAlign: 'center', marginTop: 24, paddingTop: 24, borderTop: '1px solid #30363d' }}>
+          <p style={{ color: '#8b949e', fontSize: 13, margin: 0 }}>
+            {isRegistro ? 'Já possui uma conta?' : 'Ainda não tem conta?'}{' '}
+            <button
+              type="button"
+              onClick={toggleMode}
+              style={{ background: 'none', border: 'none', color: primaryBlue, cursor: 'pointer', fontSize: 13, fontWeight: 600, padding: 0, textDecoration: 'none' }}
+            >
+              {isRegistro ? 'Fazer login' : 'Criar conta'}
+            </button>
+          </p>
+        </div>
       </div>
     </div>
   );
