@@ -10,7 +10,8 @@ import {
 export default function InformeApp() {
   const { user, logout } = useAuth();
   const [step, setStep] = useState(1);
-  const [tipoRendimento, setTipoRendimento] = useState('3208');
+  const [tipoRendimento, setTipoRendimento] = useState(''); // Começar vazio para forçar seleção
+  const [filtroCnpj, setFiltroCnpj] = useState('all'); // Filtro para resultados e DARF
   const [cnpj, setCnpj] = useState('');
   const [cData, setCData] = useState(null);
   const [cVal, setCVal] = useState(null);
@@ -104,9 +105,10 @@ export default function InformeApp() {
       setBens(newBens);
 
       const multiStr = r.cnpjsUnicos.length > 1 ? ` de ${r.cnpjsUnicos.length} fontes (abas)` : '';
-      setMsg(`✓ ${r.beneficiarios.length} beneficiário(s) extraídos${multiStr} com sucesso`);
+      setMsg(`✓ ${r.beneficiarios.length} beneficiário(s) extraídos${multiStr} com sucesso. Selecione o Tipo de Rendimento abaixo.`);
 
-      setStep(4);
+      // CORREÇÃO: Não pular para o 4, ir para o 2 se tipo estiver vazio ou apenas avançar para 2
+      setStep(2);
     } catch (err) { alert('Erro: ' + err.message); }
     finally { setBusy(false); }
   };
@@ -251,29 +253,33 @@ export default function InformeApp() {
 
         {step === 2 && <div style={S.card}>
           <h2 style={{ fontSize: 14, fontWeight: 600, color: textWhite, margin: '0 0 16px' }}>Selecione o Tipo de Rendimento</h2>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 32 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 10, marginBottom: 32, maxHeight: '300px', overflowY: 'auto', paddingRight: '8px' }}>
             {Object.keys(TIPOS_RENDIMENTO).map(k => {
               const r = TIPOS_RENDIMENTO[k];
               const isSel = tipoRendimento === k;
               return (
                 <div key={k} onClick={() => setTipoRendimento(k)}
                   style={{
-                    padding: '24px 16px', borderRadius: 10, cursor: 'pointer',
+                    padding: '16px', borderRadius: 10, cursor: 'pointer',
                     background: isSel ? 'rgba(40,98,246,0.1)' : inputBg,
                     border: `1px solid ${isSel ? primaryBlue : borderCol}`,
-                    transition: 'all 0.2s', textAlign: 'center'
+                    display: 'flex', alignItems: 'center', gap: 16,
+                    transition: 'all 0.2s'
                   }}>
-                  <div style={{ fontSize: 24, marginBottom: 12 }}>{k === '3208' ? '🏠' : '⛪'}</div>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: isSel ? '#4ade80' : textWhite, marginBottom: 6 }}>{r.titulo}</div>
-                  <div style={{ fontSize: 11, color: textMuted }}>Cód DARF: {r.codigo}</div>
-                  <div style={{ fontSize: 10, color: textMuted, marginTop: 8 }}>{r.natureza}</div>
+                  <div style={{ width: 20, height: 20, borderRadius: '50%', border: `2px solid ${isSel ? primaryBlue : borderCol}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    {isSel && <div style={{ width: 10, height: 10, borderRadius: '50%', background: primaryBlue }} />}
+                  </div>
+                  <div style={{ flex: 1, textAlign: 'left' }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: textWhite }}>{r.titulo} (Cód. {r.codigo})</div>
+                    <div style={{ fontSize: 10, color: textMuted }}>{r.natureza}</div>
+                  </div>
                 </div>
               );
             })}
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <button onClick={() => setStep(1)} style={S.bs}>Voltar</button>
-            <button onClick={() => setStep(3)} style={S.bp}>Continuar {'>'}</button>
+            <button onClick={() => setStep(bens.length > 0 ? 3 : 1)} style={S.bs}>Voltar</button>
+            <button onClick={() => setStep(3)} style={S.bp} disabled={!tipoRendimento}>Continuar {'>'}</button>
           </div>
         </div>}
 
@@ -299,32 +305,43 @@ export default function InformeApp() {
         </div>}
 
         {step === 4 && <div style={S.card}>
-          <h2 style={{ fontSize: 14, fontWeight: 600, color: textWhite, margin: '0 0 16px' }}>Resultados Analíticos</h2>
+          <h2 style={{ fontSize: 14, fontWeight: 600, color: textWhite, margin: '0 0 8px' }}>Resultados Analíticos</h2>
+
+          <div style={{ marginBottom: 20 }}>
+            <label style={S.lb}>Filtrar por Fonte Pagadora</label>
+            <select
+              value={filtroCnpj}
+              onChange={e => setFiltroCnpj(e.target.value)}
+              style={{ ...S.inp, cursor: 'pointer' }}
+            >
+              <option value="all">Todas as Fontes ({new Set(bens.map(b => b.cnpjFonte)).size})</option>
+              {Array.from(new Set(bens.map(b => b.cnpjFonte))).filter(Boolean).map(c => (
+                <option key={c} value={c}>{fmtCNPJ(c)} - {bens.find(b => b.cnpjFonte === c)?.nomeFonte || 'N/A'}</option>
+              ))}
+            </select>
+          </div>
+
           <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr 1fr', gap: 12, marginBottom: 24 }}>
             <div style={{ padding: '16px', borderRadius: 10, background: inputBg }}>
-              <div style={{ fontSize: 10, color: textMuted, marginBottom: 4 }}>Fonte Cadastrada</div>
+              <div style={{ fontSize: 10, color: textMuted, marginBottom: 4 }}>Fonte em Foco</div>
               <div style={{ fontSize: 11, fontWeight: 600, color: textWhite, textTransform: 'uppercase', marginBottom: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {(() => {
-                  const unicos = new Set(bens.map(b => b.cnpjFonte).filter(Boolean));
-                  if (unicos.size > 1) return `Múltiplas Fontes (${unicos.size})`;
-                  return fp.nome;
-                })()}
+                {filtroCnpj === 'all' ? 'Resumo Consolidado' : (bens.find(b => b.cnpjFonte === filtroCnpj)?.nomeFonte || 'N/A')}
               </div>
               <div style={{ fontSize: 10, color: textMuted }}>
-                {(() => {
-                  const unicos = new Set(bens.map(b => b.cnpjFonte).filter(Boolean));
-                  if (unicos.size > 1) return 'Diversos CNPJs';
-                  return `CNPJ: ${fmtCNPJ(fp.cnpj)}`;
-                })()}
+                {filtroCnpj === 'all' ? 'Todos os CNPJs do arquivo' : `CNPJ: ${fmtCNPJ(filtroCnpj)}`}
               </div>
             </div>
             <div style={{ padding: '16px', borderRadius: 10, background: inputBg }}>
-              <div style={{ fontSize: 10, color: textMuted, marginBottom: 6 }}>Base de Cálculo Tributável</div>
-              <div style={{ fontSize: 16, fontWeight: 700, color: primaryBlue }}>R$ {fmtMoeda(bens.reduce((a, x) => a + x.totalRend, 0))}</div>
+              <div style={{ fontSize: 10, color: textMuted, marginBottom: 6 }}>Base Tributável</div>
+              <div style={{ fontSize: 16, fontWeight: 700, color: primaryBlue }}>
+                R$ {fmtMoeda(bens.filter(b => filtroCnpj === 'all' || b.cnpjFonte === filtroCnpj).reduce((a, x) => a + x.totalRend, 0))}
+              </div>
             </div>
             <div style={{ padding: '16px', borderRadius: 10, background: inputBg }}>
-              <div style={{ fontSize: 10, color: textMuted, marginBottom: 6 }}>Imposto Retido (IRRF)</div>
-              <div style={{ fontSize: 16, fontWeight: 700, color: '#fb923c' }}>R$ {fmtMoeda(bens.reduce((a, x) => a + x.totalIRRF, 0))}</div>
+              <div style={{ fontSize: 10, color: textMuted, marginBottom: 6 }}>Total IRRF</div>
+              <div style={{ fontSize: 16, fontWeight: 700, color: '#fb923c' }}>
+                R$ {fmtMoeda(bens.filter(b => filtroCnpj === 'all' || b.cnpjFonte === filtroCnpj).reduce((a, x) => a + x.totalIRRF, 0))}
+              </div>
             </div>
           </div>
 
@@ -335,11 +352,14 @@ export default function InformeApp() {
 
           <h3 style={{ fontSize: 11, fontWeight: 500, color: textMuted, margin: '0 0 12px' }}>Downloads Individuais por Beneficiário</h3>
           <div style={{ display: 'grid', gap: 8, marginBottom: 32 }}>
-            {bens.map((b, i) => (
+            {bens.filter(b => filtroCnpj === 'all' || b.cnpjFonte === filtroCnpj).map((b, i) => (
               <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', borderRadius: 8, background: inputBg }}>
-                <div>
+                <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 11, fontWeight: 600, color: textWhite, textTransform: 'uppercase' }}>{b.nome}</div>
-                  <div style={{ fontSize: 10, color: textMuted, marginTop: 4 }}>CPF: {fmtCPF(b.cpf)} <span style={{ margin: '0 6px', color: borderCol }}>|</span> IRRF: R$ {fmtMoeda(b.totalIRRF)}</div>
+                  <div style={{ fontSize: 10, color: textMuted, marginTop: 4 }}>
+                    CPF: {fmtCPF(b.cpf)} <span style={{ margin: '0 6px', color: borderCol }}>|</span> IRRF: R$ {fmtMoeda(b.totalIRRF)}
+                  </div>
+                  {filtroCnpj === 'all' && <div style={{ fontSize: 9, color: primaryBlue, marginTop: 2 }}>Fonte: {fmtCNPJ(b.cnpjFonte)}</div>}
                 </div>
                 <button onClick={() => gen(i)} disabled={busy} style={{ ...S.bs, padding: '6px 12px', fontSize: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
                   <span style={{ fontSize: 12 }}>📄</span> Exportar
@@ -372,18 +392,24 @@ export default function InformeApp() {
                 <div style={{ fontSize: 16, fontWeight: 600, color: textWhite }}>20/01/{parseInt(fp.anoCalendario) + 1}</div>
               </div>
               <div>
-                <div style={{ fontSize: 11, color: textMuted, marginBottom: 6 }}>Valor Total do DARF</div>
-                <div style={{ fontSize: 24, fontWeight: 700, color: '#fb923c' }}>R$ {fmtMoeda(bens.reduce((a, x) => a + x.totalIRRF, 0))}</div>
+                <div style={{ fontSize: 11, color: textMuted, marginBottom: 6 }}>Valor do DARF</div>
+                <div style={{ fontSize: 24, fontWeight: 700, color: '#fb923c' }}>R$ {fmtMoeda(bens.filter(b => filtroCnpj === 'all' || b.cnpjFonte === filtroCnpj).reduce((a, x) => a + x.totalIRRF, 0))}</div>
               </div>
             </div>
+            {filtroCnpj !== 'all' && (
+              <div style={{ marginTop: 16, paddingTop: 16, borderTop: `1px solid ${borderCol}`, fontSize: 11, color: '#4ade80' }}>
+                ✓ Gerando guia específica para: <strong>{bens.find(b => b.cnpjFonte === filtroCnpj)?.nomeFonte}</strong>
+              </div>
+            )}
           </div>
 
           <button onClick={async () => {
             setBusy(true);
             try {
-              const doc = await gerarDARF(fp, bens, `20/01/${parseInt(fp.anoCalendario) + 1}`, tipoRendimento);
-              downloadPDF(doc, `DARF_${tipoRendimento}_${fp.anoCalendario}.pdf`);
-              setMsg('✓ DARF gerado em PDF com sucesso!');
+              const filteredBens = b => filtroCnpj === 'all' || b.cnpjFonte === filtroCnpj;
+              const doc = await gerarDARF(fp, bens.filter(filteredBens), `20/01/${parseInt(fp.anoCalendario) + 1}`, tipoRendimento);
+              downloadPDF(doc, `DARF_${tipoRendimento}_${filtroCnpj}_${fp.anoCalendario}.pdf`);
+              setMsg('✓ DARF gerado com sucesso!');
             } catch (e) { alert(e.message); }
             finally { setBusy(false); }
           }} disabled={busy}

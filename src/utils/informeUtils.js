@@ -55,6 +55,24 @@ export const TIPOS_RENDIMENTO = {
     titulo: 'Trabalho sem Vínculo Empregatício',
     natureza: '10004 - Rendimento do trabalho sem vínculo empregatício',
     descInfo: 'Natureza 10004 · Trabalho s/ Vínculo · IN RFB 2.060/2021',
+  },
+  '0561': {
+    codigo: '0561',
+    titulo: 'Rendimento do Trabalho Assalariado',
+    natureza: '10001 - Rendimento do trabalho assalariado',
+    descInfo: 'Natureza 10001 · Assalariado · IN RFB 2.060/2021',
+  },
+  '1708': {
+    codigo: '1708',
+    titulo: 'Serviços Prestados por Jurídicas',
+    natureza: '13005 - Remuneração de serviços profissionais',
+    descInfo: 'Natureza 13005 · Serviços Profissionais · IN RFB 2.060/2021',
+  },
+  '8045': {
+    codigo: '8045',
+    titulo: 'Comissões e Corretagens',
+    natureza: '13008 - Comissões e corretagens',
+    descInfo: 'Natureza 13008 · Comissões · IN RFB 2.060/2021',
   }
 };
 
@@ -131,9 +149,20 @@ export async function parseExcel(file) {
         if (c.length >= 14) cnpjFonteSheet = c.slice(0, 14);
       }
 
-      if (cnpjFonteSheet) {
-        cnpjsEncontrados.add(cnpjFonteSheet);
-        if (!primeiroCnpj) primeiroCnpj = cnpjFonteSheet;
+      let cnpjFonteLinha = null;
+      if (row[1]) {
+        const c = String(row[1]).replace(/\D/g, '');
+        if (c.length === 14) {
+          cnpjFonteLinha = c;
+          cnpjFonteSheet = c; // Persiste como padrão da aba se for trocado
+        }
+      }
+
+      // Se não encontrou na linha, usa o último encontrado na aba
+      const cnpjEfetivo = cnpjFonteLinha || cnpjFonteSheet;
+      if (cnpjEfetivo) {
+        cnpjsEncontrados.add(cnpjEfetivo);
+        if (!primeiroCnpj) primeiroCnpj = cnpjEfetivo;
       }
 
       // Mês da apuração
@@ -150,14 +179,14 @@ export async function parseExcel(file) {
       if (mesIdx === null || mesIdx < 0 || mesIdx > 11) continue;
 
       // Agrupar por nome, CPF e CNPJ da Fonte
-      const key = `${ns.trim().toUpperCase()}|${cnpjFonteSheet}`;
+      const key = `${ns.trim().toUpperCase()}|${cnpjEfetivo || 'SEM_CNPJ'}`;
       if (!benefMap[key]) {
         benefMap[key] = {
           nome: ns.trim().toUpperCase(),
           cpf: String(row[3]).replace(/\D/g, '').slice(0, 11), // Coluna D (Índice 3) - CPF
           rend: Array(12).fill(0),
           irrf: Array(12).fill(0),
-          cnpjFonte: cnpjFonteSheet,
+          cnpjFonte: cnpjEfetivo || '',
           sheetName: wb.SheetNames[sIdx]
         };
       }
