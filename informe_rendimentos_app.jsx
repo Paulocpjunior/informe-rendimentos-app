@@ -78,7 +78,7 @@ export default function App() {
   function processFile(f) {
     setBusy(true); parseXLS(f).then(r => {
       setBens(r.bens);
-      setStep(4);
+      if (tipo) setStep(4); else setStep(2);
     }).finally(() => setBusy(false));
   }
 
@@ -88,7 +88,7 @@ export default function App() {
     <div style={{ minHeight: "100vh", background: "#0d1b2a", color: "#e0e6ed", padding: 20 }}>
       <div style={{ maxWidth: 800, margin: "auto" }}>
         <div style={{ marginBottom: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h1 style={{ fontSize: 18, fontWeight: 700 }}>Gerador IR <span style={{ fontSize: 10, color: '#4ade80', background: 'rgba(74,222,128,0.1)', padding: '2px 6px', borderRadius: 4 }}>v1.1.2</span></h1>
+          <h1 style={{ fontSize: 18, fontWeight: 700 }}>Gerador IR <span style={{ fontSize: 10, color: '#4ade80', background: 'rgba(74,222,128,0.1)', padding: '2px 6px', borderRadius: 4 }}>v1.1.5</span></h1>
           <span style={{ fontSize: 10, color: '#8995a8' }}>{TIPOS_RENDIMENTO[tipo]?.titulo || 'Selecione o código no Passo 2'}</span>
         </div>
         <div style={{ display: 'flex', gap: 10, marginBottom: 20 }}>

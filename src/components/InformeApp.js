@@ -112,10 +112,16 @@ export default function InformeApp() {
       setBens(newBens);
 
       const multiStr = r.cnpjsUnicos.length > 1 ? ` de ${r.cnpjsUnicos.length} fontes (abas)` : '';
-      setMsg(`✓ ${r.beneficiarios.length} beneficiário(s) extraídos${multiStr} com sucesso.`);
+      const successMsg = `✓ ${r.beneficiarios.length} beneficiário(s) extraídos${multiStr} com sucesso.`;
 
-      // Avançar para Resultados (Passo 4) após importação
-      setStep(4);
+      // SEGURANÇA MÁXIMA: Se não tem tipo, VOLTA pro 2. Se tem, vai pro 4.
+      if (tipoRendimento) {
+        setMsg(successMsg);
+        setStep(4);
+      } else {
+        setMsg(`${successMsg} Agora selecione o Tipo de Rendimento abaixo.`);
+        setStep(2);
+      }
     } catch (err) { alert('Erro: ' + err.message); }
     finally { setBusy(false); }
   };
@@ -210,7 +216,7 @@ export default function InformeApp() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
             <div style={{ width: 40, height: 40, borderRadius: 8, background: primaryBlue, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 700, color: '#fff' }}>IR</div>
             <div>
-              <h1 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: textWhite }}>Gerador de Informe de Rendimentos <span style={{ fontSize: 10, color: '#4ade80', marginLeft: 8, padding: '2px 6px', background: 'rgba(74,222,128,0.1)', borderRadius: 4 }}>v1.1.2</span></h1>
+              <h1 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: textWhite }}>Gerador de Informe de Rendimentos <span style={{ fontSize: 10, color: '#4ade80', marginLeft: 8, padding: '2px 6px', background: 'rgba(74,222,128,0.1)', borderRadius: 4 }}>v1.1.5</span></h1>
               <p style={{ margin: 0, fontSize: 11, color: textMuted, marginTop: 2 }}>{TIPOS_RENDIMENTO[tipoRendimento]?.descInfo || 'Selecione o código no Passo 2'}</p>
             </div>
           </div>
