@@ -156,75 +156,66 @@ export default function InformeApp() {
     lb: { display: 'block', fontSize: 11, color: textMuted, marginBottom: 6, fontWeight: 500 }
   };
 
+  // Validação de navegação: impede pular passos para frente sem preenchimento
+  const canNavigate = (target) => {
+    if (target < step) return true; // Sempre pode voltar
+    if (target === 1) return true;
+    if (target === 2) return fp.nome && fp.cnpj;
+    if (target === 3) return fp.nome && fp.cnpj && tipoRendimento;
+    if (target === 4) return bens.length > 0 && tipoRendimento;
+    if (target === 5) return bens.length > 0 && tipoRendimento;
+    return false;
+  };
+
+  const StepIndicator = ({ current, total, onStepClick, canNavigate }) => (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 40 }}>
+      {Array.from({ length: total }).map((_, i) => {
+        const n = i + 1;
+        const active = n === current;
+        const done = n < current;
+        const reachable = canNavigate(n);
+        return (
+          <div key={n} style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div
+              onClick={() => reachable && onStepClick(n)}
+              style={{
+                width: 28, height: 28, borderRadius: '50%',
+                background: active ? primaryBlue : (done ? 'rgba(74,222,128,0.2)' : 'rgba(255,255,255,0.05)'),
+                border: `1px solid ${active ? primaryBlue : (done ? '#4ade80' : borderCol)}`,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                cursor: reachable ? 'pointer' : 'not-allowed',
+                transition: 'all 0.3s'
+              }}>
+              {done ? <span style={{ color: '#4ade80', fontSize: 14 }}>✓</span> :
+                <span style={{ fontSize: 11, fontWeight: 700, color: active ? textWhite : textMuted }}>{n}</span>}
+            </div>
+            {n < total && <div style={{ flex: 1, height: 2, background: done ? '#4ade80' : borderCol, opacity: 0.3 }} />}
+          </div>
+        );
+      })}
+    </div>
+  );
+
   return (
-    <div style={{ minHeight: '100vh', background: darkBg, fontFamily: "'Inter', system-ui, sans-serif", color: textWhite }}>
-      <header style={{ padding: '16px 32px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-          <div style={{ width: 40, height: 40, borderRadius: 8, background: primaryBlue, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 700, color: '#fff' }}>IR</div>
-          <div><h1 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: textWhite }}>Gerador de Informe de Rendimentos</h1><p style={{ margin: 0, fontSize: 11, color: textMuted, marginTop: 2 }}>{TIPOS_RENDIMENTO[tipoRendimento]?.descInfo || ''}</p></div>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          <span style={{ fontSize: 12, color: textMuted }}>{user.email}</span>
-          <button onClick={logout} style={{ ...S.bs, padding: '6px 14px', fontSize: 11 }}>Sair</button>
-        </div>
-      </header>
+    <div style={{ minHeight: '100vh', background: '#0a0f1a', color: textWhite, padding: '40px 20px', fontFamily: "'Inter', sans-serif" }}>
+      <div style={{ maxWidth: 900, margin: '0 auto' }}>
+        <header style={{ padding: '0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '40px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+            <div style={{ width: 40, height: 40, borderRadius: 8, background: primaryBlue, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 700, color: '#fff' }}>IR</div>
+            <div><h1 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: textWhite }}>Gerador de Informe de Rendimentos</h1><p style={{ margin: 0, fontSize: 11, color: textMuted, marginTop: 2 }}>{TIPOS_RENDIMENTO[tipoRendimento]?.descInfo || ''}</p></div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+            <span style={{ fontSize: 12, color: textMuted }}>{user.email}</span>
+            <button onClick={logout} style={{ ...S.bs, padding: '6px 14px', fontSize: 11 }}>Sair</button>
+          </div>
+        </header>
 
-      <div style={{ maxWidth: 840, margin: '40px auto', padding: '0 20px' }}>
-
-        {/* STEPPER PIXEL PERFECT DA IMAGEM */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 40 }}>
-          {[
-            { n: 1, l: 'Fonte Pagadora' },
-            { n: 2, l: 'Tipo de Rendimento' },
-            { n: 3, l: 'Importar Excel' },
-            { n: 4, l: 'Gerar PDFs' },
-            { n: 5, l: 'Gerar DARF' }
-          ].map((it, idx) => {
-            let isCurrent = false;
-            let canClick = false;
-            let clickStep = 1;
-
-            if (it.n === 1) { isCurrent = step === 1; canClick = true; clickStep = 1; }
-            if (it.n === 2) { isCurrent = step === 2; canClick = fp.nome !== ''; clickStep = 2; }
-            if (it.n === 3) { isCurrent = step === 3; canClick = step >= 2; clickStep = 3; }
-            if (it.n === 4) { isCurrent = step === 4; canClick = bens.length > 0; clickStep = 4; }
-            if (it.n === 5) { isCurrent = step === 5; canClick = step >= 4; clickStep = 5; }
-
-            const isActive = isCurrent;
-            const isDone = (it.n < step);
-            const isOpacity = (it.n > step) ? 0.4 : 1;
-
-            return (
-              <React.Fragment key={it.n}>
-                <div
-                  onClick={() => { if (canClick) setStep(clickStep); }}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 8,
-                    background: isActive ? 'rgba(40,98,246,0.15)' : 'transparent',
-                    border: isActive ? `1px solid ${primaryBlue}` : `1px solid ${borderCol}`,
-                    borderRadius: 30,
-                    padding: '6px 16px 6px 6px',
-                    cursor: canClick ? 'pointer' : 'default',
-                    opacity: isOpacity
-                  }}>
-                  <span style={{
-                    width: 24, height: 24, borderRadius: '50%',
-                    background: isActive ? primaryBlue : (isDone ? '#3a445c' : '#222839'),
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: 11, fontWeight: 600,
-                    color: isActive ? '#fff' : (isDone ? textWhite : textMuted)
-                  }}>
-                    {it.n}
-                  </span>
-                  <span style={{ fontSize: 11.5, fontWeight: isActive ? 500 : 400, color: isActive ? '#fff' : textMuted }}>
-                    {it.l}
-                  </span>
-                </div>
-                {idx < 4 && <div style={{ height: 1, width: 24, background: borderCol, margin: '0 8px', opacity: 0.5 }} />}
-              </React.Fragment>
-            );
-          })}
-        </div>
+        <StepIndicator
+          current={step}
+          total={5}
+          onStepClick={setStep}
+          canNavigate={canNavigate}
+        />
 
         {msg && <div style={{ padding: '12px 16px', background: msg.startsWith('✓') ? 'rgba(34,197,94,0.08)' : 'rgba(239,68,68,0.08)', border: `1px solid ${msg.startsWith('✓') ? 'rgba(34,197,94,0.2)' : 'rgba(239,68,68,0.2)'}`, borderRadius: 6, marginBottom: 24, fontSize: 12, color: msg.startsWith('✓') ? '#4ade80' : '#f87171', display: 'flex', alignItems: 'center', gap: 8 }}>{msg}</div>}
 
@@ -259,15 +250,23 @@ export default function InformeApp() {
               const isSel = tipoRendimento === k;
               return (
                 <div key={k} onClick={() => setTipoRendimento(k)}
+                  className="revenue-card"
                   style={{
-                    padding: '16px', borderRadius: 10, cursor: 'pointer',
-                    background: isSel ? 'rgba(40,98,246,0.1)' : inputBg,
+                    padding: '18px', borderRadius: 12, cursor: 'pointer',
+                    background: isSel ? 'rgba(40,98,246,0.15)' : inputBg,
                     border: `1px solid ${isSel ? primaryBlue : borderCol}`,
                     display: 'flex', alignItems: 'center', gap: 16,
-                    transition: 'all 0.2s'
+                    transform: isSel ? 'scale(1.02)' : 'scale(1)',
+                    transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                    boxShadow: isSel ? `0 0 20px rgba(40,98,246,0.2)` : 'none'
                   }}>
-                  <div style={{ width: 20, height: 20, borderRadius: '50%', border: `2px solid ${isSel ? primaryBlue : borderCol}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    {isSel && <div style={{ width: 10, height: 10, borderRadius: '50%', background: primaryBlue }} />}
+                  <div style={{
+                    width: 24, height: 24, borderRadius: '50%',
+                    border: `2px solid ${isSel ? primaryBlue : borderCol}`,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    background: isSel ? primaryBlue : 'transparent'
+                  }}>
+                    {isSel && <div style={{ width: 10, height: 10, borderRadius: '50%', background: textWhite }} />}
                   </div>
                   <div style={{ flex: 1, textAlign: 'left' }}>
                     <div style={{ fontSize: 13, fontWeight: 600, color: textWhite }}>{r.titulo} (Cód. {r.codigo})</div>
