@@ -114,39 +114,65 @@ export async function parseExcel(file) {
 
     let cnpjFonteSheet = '';
 
+    // Mapeamento dinâmico de colunas
+    let idxNome = 2;
+    let idxIdentificador = 3;
+    let idxApuracao = 4;
+    let idxBruto = 5;
+    let idxIrrf = 6;
+    let idxCnpjFonte = 1;
+
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
-      if (!row || row.length < 8) continue;
-      const nome = row[2]; // Coluna C (Índice 2) - Nome
-      if (!nome || String(nome).trim() === '') continue;
-      const ns = String(nome);
-      if (ns.indexOf('Nome') >= 0 && ns.indexOf('Propriet') >= 0) continue;
-      // Removendo linha 'const br = Number(row[6])' que não é mais necessária aqui
+      if (!row || row.length < 5) continue;
 
-      if (!cnpjFonteSheet && row[1]) {
-        const c = String(row[1]).replace(/\D/g, '');
+      // Detectar Layout pelo Cabeçalho
+      const rowStr = JSON.stringify(row).toUpperCase();
+      if (rowStr.indexOf('LOCALIDADE') >= 0 && rowStr.indexOf('CNPJ') >= 0) {
+        if (rowStr.indexOf('CÓDIGO (CDG)') >= 0 || rowStr.indexOf('CODIGO (CDG)') >= 0) {
+          // Novo Layout (Detectado "Código (CDG)")
+          idxNome = 3;          // Nome (Proprietário)
+          idxIdentificador = 4; // CNPJ (Proprietário)
+          idxApuracao = 5;      // Apuração
+          idxBruto = 6;         // Bruto
+          idxIrrf = 7;          // IRRF
+        } else if (rowStr.indexOf('NOME') >= 0 && rowStr.indexOf('CPF') >= 0) {
+          // Layout Antigo
+          idxNome = 2;
+          idxIdentificador = 3;
+          idxApuracao = 4;
+          idxBruto = 5;
+          idxIrrf = 6;
+        }
+        continue; // Pula a linha de cabeçalho
+      }
+
+      const nome = row[idxNome];
+      if (!nome || String(nome).trim() === '' || String(nome).toUpperCase().indexOf('TOTAL:') >= 0) continue;
+      const ns = String(nome);
+
+      if (!cnpjFonteSheet && row[idxCnpjFonte]) {
+        const c = String(row[idxCnpjFonte]).replace(/\D/g, '');
         if (c.length >= 14) cnpjFonteSheet = c.slice(0, 14);
       }
 
       let cnpjFonteLinha = null;
-      if (row[1]) {
-        const c = String(row[1]).replace(/\D/g, '');
+      if (row[idxCnpjFonte]) {
+        const c = String(row[idxCnpjFonte]).replace(/\D/g, '');
         if (c.length === 14) {
           cnpjFonteLinha = c;
-          cnpjFonteSheet = c; // Persiste como padrão da aba se for trocado
+          cnpjFonteSheet = c;
         }
       }
 
-      // Se não encontrou na linha, usa o último encontrado na aba
       const cnpjEfetivo = cnpjFonteLinha || cnpjFonteSheet;
       if (cnpjEfetivo) {
         cnpjsEncontrados.add(cnpjEfetivo);
         if (!primeiroCnpj) primeiroCnpj = cnpjEfetivo;
       }
 
-      // Mês da apuração
       let mesIdx = null;
-      const ap = row[4]; // Coluna E (Índice 4) - Data/Apuração
+      const ap = row[idxApuracao];
       if (ap instanceof Date) mesIdx = ap.getMonth();
       else if (typeof ap === 'number') mesIdx = new Date((ap - 25569) * 86400000).getMonth();
       else if (ap) {
@@ -157,26 +183,27 @@ export async function parseExcel(file) {
       }
       if (mesIdx === null || mesIdx < 0 || mesIdx > 11) continue;
 
-      // Agrupar por nome, CPF e CNPJ da Fonte
-      const key = `${ns.trim().toUpperCase()}|${cnpjEfetivo || 'SEM_CNPJ'}`;
+      const identificadorRaw = String(row[idxIdentificador]).replace(/\D/g, '');
+      const key = `${ns.trim().toUpperCase()}|${cnpjEfetivo || 'SEM_CNPJ'}|${identificadorRaw}`;
+
       if (!benefMap[key]) {
         benefMap[key] = {
           nome: ns.trim().toUpperCase(),
-          cpf: String(row[3]).replace(/\D/g, '').slice(0, 11), // Coluna D (Índice 3) - CPF
+          cpf: identificadorRaw,
           rend: Array(12).fill(0),
           irrf: Array(12).fill(0),
           cnpjFonte: cnpjEfetivo || '',
           sheetName: wb.SheetNames[sIdx]
         };
       }
-      benefMap[key].rend[mesIdx] += Number(row[5]) || 0; // Coluna F (Índice 5) - Bruto
-      benefMap[key].irrf[mesIdx] += Number(row[6]) || 0; // Coluna G (Índice 6) - IRRF
+      benefMap[key].rend[mesIdx] += Number(row[idxBruto]) || 0;
+      benefMap[key].irrf[mesIdx] += Number(row[idxIrrf]) || 0;
     }
   }
 
   const beneficiarios = Object.values(benefMap).map(b => ({
     ...b,
-    cpfValido: validarCPF(b.cpf),
+    cpfValido: b.cpf.length === 11 ? validarCPF(b.cpf) : (b.cpf.length === 14 ? validarCNPJ(b.cpf).valid : false),
     totalRend: b.rend.reduce((a, c) => a + c, 0),
     totalIRRF: b.irrf.reduce((a, c) => a + c, 0)
   }));
@@ -237,9 +264,10 @@ export async function gerarPDF(fp, beneficiarios, idx, tipoRendimento = '3208') 
     const cW = 72;
     doc.rect(ml, y, cW, 10, 'S');
     doc.setTextColor(100); doc.setFontSize(6.5); doc.setFont('helvetica', 'normal');
-    doc.text('CPF', ml + 2.5, y + 3.5);
+    const labelId = b.cpf.length === 14 ? 'CNPJ' : 'CPF';
+    doc.text(labelId, ml + 2.5, y + 3.5);
     doc.setTextColor(0); doc.setFontSize(10.5); doc.setFont('helvetica', 'bold');
-    doc.text(fmtCPF(b.cpf), ml + 2.5, y + 8);
+    doc.text(b.cpf.length === 14 ? fmtCNPJ(b.cpf) : fmtCPF(b.cpf), ml + 2.5, y + 8);
     doc.rect(ml + cW, y, cw - cW, 10, 'S');
     doc.setTextColor(100); doc.setFontSize(6.5); doc.setFont('helvetica', 'normal');
     doc.text('NATUREZA DO RENDIMENTO', ml + cW + 2.5, y + 3.5);
