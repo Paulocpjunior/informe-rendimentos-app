@@ -114,41 +114,43 @@ export async function parseExcel(file) {
 
     let cnpjFonteSheet = '';
 
-    // Mapeamento dinâmico de colunas
+    // Mapeamento dinâmico de colunas (padrão inicial do layout antigo)
     let idxNome = 2;
     let idxIdentificador = 3;
     let idxApuracao = 4;
     let idxBruto = 5;
     let idxIrrf = 6;
+    let idxIrAcumulado = -1;
+    let idxTotalIr = -1;
     let idxCnpjFonte = 1;
 
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
       if (!row || row.length < 5) continue;
 
-      // Detectar Layout pelo Cabeçalho
+      // Detectar Layout e Mapear Colunas Dinamicamente
       const rowStr = JSON.stringify(row).toUpperCase();
-      if (rowStr.indexOf('LOCALIDADE') >= 0 && rowStr.indexOf('CNPJ') >= 0) {
-        if (rowStr.indexOf('CÓDIGO (CDG)') >= 0 || rowStr.indexOf('CODIGO (CDG)') >= 0) {
-          // Novo Layout (Detectado "Código (CDG)")
-          idxNome = 3;          // Nome (Proprietário)
-          idxIdentificador = 4; // CNPJ (Proprietário)
-          idxApuracao = 5;      // Apuração
-          idxBruto = 6;         // Bruto
-          idxIrrf = 7;          // IRRF
-        } else if (rowStr.indexOf('NOME') >= 0 && rowStr.indexOf('CPF') >= 0) {
-          // Layout Antigo
-          idxNome = 2;
-          idxIdentificador = 3;
-          idxApuracao = 4;
-          idxBruto = 5;
-          idxIrrf = 6;
-        }
-        continue; // Pula a linha de cabeçalho
+      if (rowStr.indexOf('LOCALIDADE') >= 0 && (rowStr.indexOf('CNPJ') >= 0 || rowStr.indexOf('CPF') >= 0)) {
+        // Mapeia cada coluna pelo nome
+        row.forEach((cell, colIdx) => {
+          const c = String(cell).toUpperCase();
+          if (c.indexOf('NOME') >= 0) idxNome = colIdx;
+          else if (c.indexOf('CPF') >= 0 || c.indexOf('IDENTIFICADOR') >= 0 || (c.indexOf('CNPJ') >= 0 && c.indexOf('PROPRIET') >= 0)) idxIdentificador = colIdx;
+          else if (c.indexOf('APURAÇ') >= 0 || c.indexOf('APURAC') >= 0) idxApuracao = colIdx;
+          else if (c.indexOf('BRUTO') >= 0) idxBruto = colIdx;
+          else if (c.indexOf('TOTAL DE IR') >= 0) idxTotalIr = colIdx;
+          else if (c.indexOf('IR ACUMULADO') >= 0) idxIrAcumulado = colIdx;
+          else if (c.indexOf('IRRF') >= 0) idxIrrf = colIdx;
+          else if (c.indexOf('CNPJ') >= 0 && c.indexOf('PROPRIET') === -1) idxCnpjFonte = colIdx;
+        });
+        continue;
       }
 
+      // Pular linhas de Total (busca "TOTAL:" em qualquer coluna da linha)
+      if (row.some(cell => String(cell).toUpperCase().indexOf('TOTAL:') >= 0)) continue;
+
       const nome = row[idxNome];
-      if (!nome || String(nome).trim() === '' || String(nome).toUpperCase().indexOf('TOTAL:') >= 0) continue;
+      if (!nome || String(nome).trim() === '') continue;
       const ns = String(nome);
 
       if (!cnpjFonteSheet && row[idxCnpjFonte]) {
@@ -180,6 +182,16 @@ export async function parseExcel(file) {
         let m = s.match(/(\d{4})-(\d{2})/);
         if (m) mesIdx = parseInt(m[2], 10) - 1;
         if (mesIdx === null) { m = s.match(/(\d{2})\/(\d{4})/); if (m) mesIdx = parseInt(m[1], 10) - 1; }
+        // Caso novo formato jan/25, fev/25 etc (suporta PT e EN)
+        if (mesIdx === null) {
+          const mesesPt = ['JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN', 'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ'];
+          const mesesEn = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+          const abrev = s.slice(0, 3).toUpperCase();
+          const fPt = mesesPt.indexOf(abrev);
+          const fEn = mesesEn.indexOf(abrev);
+          if (fPt >= 0) mesIdx = fPt;
+          else if (fEn >= 0) mesIdx = fEn;
+        }
       }
       if (mesIdx === null || mesIdx < 0 || mesIdx > 11) continue;
 
@@ -197,7 +209,14 @@ export async function parseExcel(file) {
         };
       }
       benefMap[key].rend[mesIdx] += Number(row[idxBruto]) || 0;
-      benefMap[key].irrf[mesIdx] += Number(row[idxIrrf]) || 0;
+
+      // Lógica Robusta para IRRF
+      const irrfSimples = Number(row[idxIrrf]) || 0;
+      const irAcum = idxIrAcumulado !== -1 ? (Number(row[idxIrAcumulado]) || 0) : 0;
+      const totalIr = idxTotalIr !== -1 ? (Number(row[idxTotalIr]) || 0) : 0;
+
+      // Pega o maior valor entre o Total de IR explícito ou a soma de IRRF + Acumulado
+      benefMap[key].irrf[mesIdx] += Math.max(irrfSimples + irAcum, totalIr);
     }
   }
 
