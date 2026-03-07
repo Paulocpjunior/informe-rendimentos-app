@@ -1,66 +1,100 @@
 /**
- * SicalcWeb Automation Bot
- * Usage: node sicalc_bot.js --cpf=82960712153 --code=3208 --period=12/2025 --value=550.00
+ * SicalcWeb Automation Bot (v2.1)
+ * Este script automatiza o preenchimento no portal oficial SicalcWeb.
+ * Requer: npm install playwright
  */
-const { chromium } = require('playwright');
+
+const fs = require('fs');
+const path = require('path');
 
 async function runSicalcBot() {
+    let playwright;
+    try {
+        playwright = require('playwright');
+    } catch (e) {
+        console.error('\n❌ ERRO: Playwright não encontrado!');
+        console.error('Por favor, execute: npm install playwright');
+        console.error('E depois: npx playwright install chromium\n');
+        process.exit(1);
+    }
+
+    const { chromium } = playwright;
+
     const args = process.argv.slice(2).reduce((acc, arg) => {
         const [k, v] = arg.split('=');
-        acc[k.replace('--', '')] = v;
+        if (k && v) acc[k.replace('--', '')] = v;
         return acc;
     }, {});
 
     if (!args.cpf || !args.code || !args.period || !args.value) {
-        console.error('Missing arguments! --cpf --code --period --value');
+        console.log('\nUso: node sicalc_bot.js --cpf=000.000.000-00 --code=3208 --period=01/2025 --value=1500.00');
         process.exit(1);
     }
 
-    const browser = await chromium.launch({ headless: false }); // Needs head for captcha
-    const page = await browser.newPage();
+    console.log('\n🚀 Iniciando Automação SicalcWeb...');
+    const browser = await chromium.launch({ headless: false });
+    const context = await browser.newContext({ acceptDownloads: true });
+    const page = await context.newPage();
 
-    console.log('--- Iniciando SicalcWeb ---');
-    await page.goto('https://sicalc.receita.fazenda.gov.br/sicalc/rapido/contribuinte');
+    try {
+        await page.goto('https://sicalc.receita.fazenda.gov.br/sicalc/rapido/contribuinte');
 
-    // Passo 1: Identificação
-    console.log('Preenchendo identificação...');
-    await page.click('#optionPF');
-    await page.fill('#cpfFormatado', args.cpf);
+        // PASSO 1 - Identificação
+        console.log('🔹 Preenchendo CPF...');
+        await page.click('#optionPF');
+        await page.fill('#cpfFormatado', args.cpf);
 
-    console.log('\n⚠️  ATENÇÃO: Resolva o hCaptcha no navegador agora.');
-    console.log('O script aguardará você clicar em "Continuar" após resolver o desafio.');
+        console.log('\n⚠️  Aguardando resolução do hCaptcha...');
+        console.log('Resolva o desafio e o script continuará automaticamente assim que a página mudar.');
 
-    // Aguarda o usuário avançar para a próxima tela manualmente
-    await page.waitForSelector('#codigoReceita', { timeout: 0 });
+        // O hCaptcha redireciona para a página de código de receita. 
+        // Esperamos o campo de código aparecer.
+        await page.waitForSelector('#codigoReceita', { timeout: 0 });
 
-    // Passo 2: Código da Receita
-    console.log('Preenchendo Código da Receita...');
-    await page.fill('#codigoReceita', args.code);
-    await page.keyboard.press('Enter');
+        // PASSO 2 - Código da Receita
+        console.log('🔹 Preenchendo Código da Receita:', args.code);
+        await page.fill('#codigoReceita', args.code);
+        await page.keyboard.press('Enter');
 
-    // Passo 3: Dados do DARF
-    console.log('Preenchendo valores...');
-    await page.waitForSelector('#periodoApuracao');
-    await page.fill('#periodoApuracao', args.period);
-    await page.fill('#valorPrincipal', args.value);
+        // PASSO 3 - Dados do DARF
+        console.log('🔹 Preenchendo Período e Valor...');
+        await page.waitForSelector('#periodoApuracao');
+        await page.fill('#periodoApuracao', args.period);
+        await page.fill('#valorPrincipal', args.value);
 
-    await page.click('button:has-text("Calcular")');
+        // Clica em Calcular
+        await page.click('input[value="Calcular"], button:has-text("Calcular")');
 
-    // Passo 4: Emissão
-    console.log('Finalizando emissão...');
-    await page.waitForSelector('table.table-striped');
-    await page.click('input[name="selecionarTudo"]'); // Seleciona o item calculado
-    await page.click('button:has-text("Emitir DARF")');
+        // PASSO 4 - Tabela de Resultados
+        console.log('🔹 Processando Tabela de Resultados...');
+        await page.waitForSelector('table.table-striped', { timeout: 20000 });
 
-    console.log('\n✅ DARF Gerado com Sucesso!');
-    console.log('O download deve iniciar automaticamente.');
+        // Seleciona a linha (checkbox)
+        const checkbox = await page.locator('table input[type="checkbox"]').first();
+        await checkbox.check();
 
-    // Aguarda um pouco antes de fechar
-    await page.waitForTimeout(5000);
-    await browser.close();
+        // PASSO 5 - Emissão e Download
+        console.log('🔹 Emitindo DARF Oficial (Download)...');
+
+        const [download] = await Promise.all([
+            page.waitForEvent('download', { timeout: 60000 }),
+            page.click('input[value="Emitir Darf"], button:has-text("Emitir Darf")')
+        ]);
+
+        const fileName = `DARF_OFICIAL_${args.cpf.replace(/\D/g, '')}.pdf`;
+        const downloadPath = path.join(process.cwd(), fileName);
+        await download.saveAs(downloadPath);
+
+        console.log(`\n✅ SUCESSO! DARF gerado e salvo em:`);
+        console.log(`👉 ${downloadPath}\n`);
+
+    } catch (err) {
+        console.error('\n❌ Erro durante a automação:', err.message);
+    } finally {
+        await page.waitForTimeout(3000);
+        await browser.close();
+        console.log('Navegador fechado.');
+    }
 }
 
-runSicalcBot().catch(err => {
-    console.error('Erro no bot:', err);
-    process.exit(1);
-});
+runSicalcBot();
