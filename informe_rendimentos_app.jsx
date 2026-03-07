@@ -6,13 +6,25 @@ const TIPOS_RENDIMENTO = {
   '0588': { codigo: '0588', titulo: 'Trabalho sem Vínculo', natureza: '10004 - Rendimento do trabalho sem vínculo empregatício', descInfo: 'Natureza 10004 · Trabalho s/ Vínculo' },
   '0561': { codigo: '0561', titulo: 'Trabalho Assalariado', natureza: '10001 - Rendimento do trabalho assalariado', descInfo: 'Natureza 10001 · Assalariado' },
   '1708': { codigo: '1708', titulo: 'Serviços Jurídicas', natureza: '13005 - Remuneração de serviços profissionais', descInfo: 'Natureza 13005 · Serviços Profissionais' },
-  '8045': { codigo: '8045', titulo: 'Comissões', natureza: '13008 - Comissões e corretagens', descInfo: 'Natureza 13008 · Comissões' }
+  '8045': { codigo: '8045', titulo: 'Comissões', natureza: '13008 - Comissões e corretagens', descInfo: 'Natureza 13008 · Comissões' },
+  '10003': { codigo: '0561', titulo: 'Prebenda / Ministro Religioso', natureza: '10003 - Ministro de Confissão Religiosa', descInfo: 'Natureza 10003 · Prebenda' },
+  '12002': { codigo: '---', titulo: 'Ajuda de Custo / Diárias', natureza: '12002 - Diárias e Ajuda de Custo', descInfo: 'Natureza 12002 · Isento' }
 };
 
 const MESES = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
 const fm = (v) => (Number(v) || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const fc = (c) => { const d = String(c).replace(/\D/g, ""); return d.length === 11 ? d.slice(0, 3) + "." + d.slice(3, 6) + "." + d.slice(6, 9) + "-" + d.slice(9) : c; };
 const fnn = (c) => { const d = String(c).replace(/\D/g, ""); return d.length === 14 ? d.slice(0, 2) + "." + d.slice(2, 5) + "." + d.slice(5, 8) + "/" + d.slice(8, 12) + "-" + d.slice(12) : c; };
+
+function calcularIRRF(v) {
+  const ds = 564.8, bs = Math.max(0, v - ds);
+  const ct = (b) => {
+    if (b <= 2259.2) return 0; if (b <= 2826.65) return (b * 0.075) - 169.44;
+    if (b <= 3751.05) return (b * 0.15) - 381.44; if (b <= 4664.68) return (b * 0.225) - 662.77;
+    return (b * 0.275) - 896;
+  };
+  return Math.max(0, Math.min(ct(v), ct(bs)));
+}
 
 function vCPF(x) { const d = String(x).replace(/\D/g, ""); if (d.length !== 11 || /^(\d)\1{10}$/.test(d)) return false; let s = 0; for (let i = 0; i < 9; i++)s += parseInt(d[i]) * (10 - i); let r = (s * 10) % 11; if (r === 10) r = 0; if (parseInt(d[9]) !== r) return false; s = 0; for (let i = 0; i < 10; i++)s += parseInt(d[i]) * (11 - i); r = (s * 10) % 11; if (r === 10) r = 0; return parseInt(d[10]) === r; }
 
@@ -33,8 +45,9 @@ function parseXLS(file) {
         var ap = row[4]; var mi = null;
         if (ap instanceof Date) mi = ap.getMonth(); else if (typeof ap === "number") mi = new Date((ap - 25569) * 86400000).getMonth();
         if (mi === null || mi < 0 || mi > 11) return;
-        var k = `${n.trim().toUpperCase()}|${curCnpj}`;
-        if (!bm[k]) bm[k] = { nome: n.trim().toUpperCase(), cnpj: curCnpj, cpf: String(row[3]).replace(/\D/g, "").slice(0, 11), rend: Array(12).fill(0), irrf: Array(12).fill(0) };
+        var cpf = String(row[3]).replace(/\D/g, "").slice(0, 11);
+        var k = `${n.trim().toUpperCase()}|${cpf}`;
+        if (!bm[k]) bm[k] = { nome: n.trim().toUpperCase(), cnpj: curCnpj, cpf: cpf, rend: Array(12).fill(0), irrf: Array(12).fill(0) };
         bm[k].rend[mi] += Number(row[5]) || 0; bm[k].irrf[mi] += Number(row[6]) || 0;
       });
     });
