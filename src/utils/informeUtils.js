@@ -242,12 +242,17 @@ export async function parseExcel(file) {
     }
   }
 
-  const beneficiarios = Object.values(benefMap).map(b => ({
-    ...b,
-    cpfValido: b.cpf.length === 11 ? validarCPF(b.cpf) : (b.cpf.length === 14 ? validarCNPJ(b.cpf).valid : false),
-    totalRend: b.rend.reduce((a, c) => a + c, 0),
-    totalIRRF: b.irrf.reduce((a, c) => a + c, 0)
-  }));
+  const beneficiarios = Object.values(benefMap).map(b => {
+    const irrfCalculadoMeses = b.rend.map(r => calcularIRRF(r));
+    return {
+      ...b,
+      cpfValido: b.cpf.length === 11 ? validarCPF(b.cpf) : (b.cpf.length === 14 ? validarCNPJ(b.cpf).valid : false),
+      totalRend: b.rend.reduce((a, c) => a + c, 0),
+      totalIRRF: b.irrf.reduce((a, c) => a + c, 0),
+      totalIrrfCalculado: irrfCalculadoMeses.reduce((a, c) => a + c, 0),
+      irrfCalculadoMeses
+    };
+  });
 
   return { cnpjFonte: primeiroCnpj, cnpjsUnicos: Array.from(cnpjsEncontrados), beneficiarios };
 }

@@ -3,7 +3,7 @@ import { useAuth } from '../config/AuthContext';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import {
-  validarCNPJ, validarCPF, fmtMoeda, fmtCPF, fmtCNPJ,
+  validarCNPJ, validarCPF, fmtMoeda, fmtCPF, fmtCNPJ, calcularIRRF,
   MESES, TIPOS_RENDIMENTO, CNPJ_DB, parseExcel, gerarPDF, downloadPDF, fetchCNPJ, gerarDARF, baixarModeloExcel, exportToCSV
 } from '../utils/informeUtils';
 
@@ -351,10 +351,20 @@ export default function InformeApp() {
               </div>
             </div>
             <div style={{ padding: '16px', borderRadius: 10, background: inputBg }}>
-              <div style={{ fontSize: 10, color: textMuted, marginBottom: 6 }}>Total IRRF</div>
+              <div style={{ fontSize: 10, color: textMuted, marginBottom: 6 }}>Total IRRF (Exportado)</div>
               <div style={{ fontSize: 16, fontWeight: 700, color: '#fb923c' }}>
                 R$ {fmtMoeda(bens.filter(b => filtroCnpj === 'all' || b.cnpjFonte === filtroCnpj).reduce((a, x) => a + x.totalIRRF, 0))}
               </div>
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 12, marginBottom: 24 }}>
+            <div style={{ padding: '16px', borderRadius: 10, background: 'rgba(74,222,128,0.05)', border: '1px solid rgba(74,222,128,0.1)' }}>
+              <div style={{ fontSize: 10, color: '#4ade80', marginBottom: 6, fontWeight: 700 }}>✓ CÁLCULO AUTOMÁTICO (Simulação 2024/2025)</div>
+              <div style={{ fontSize: 20, fontWeight: 800, color: '#4ade80' }}>
+                R$ {fmtMoeda(bens.filter(b => filtroCnpj === 'all' || b.cnpjFonte === filtroCnpj).reduce((a, x) => a + x.totalIrrfCalculado, 0))}
+              </div>
+              <div style={{ fontSize: 10, color: textMuted, marginTop: 4 }}>Este valor utiliza a tabela progressiva oficial com desconto simplificado de R$ 564,80.</div>
             </div>
           </div>
 
@@ -376,7 +386,7 @@ export default function InformeApp() {
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 11, fontWeight: 600, color: textWhite, textTransform: 'uppercase' }}>{b.nome}</div>
                   <div style={{ fontSize: 10, color: textMuted, marginTop: 4 }}>
-                    CPF: {fmtCPF(b.cpf)} <span style={{ margin: '0 6px', color: borderCol }}>|</span> IRRF: R$ {fmtMoeda(b.totalIRRF)}
+                    CPF: {fmtCPF(b.cpf)} <span style={{ margin: '0 6px', color: borderCol }}>|</span> IRRF: R$ {fmtMoeda(b.totalIRRF)} <span style={{ color: '#4ade80', marginLeft: 6 }}>(Calc: R$ {fmtMoeda(b.totalIrrfCalculado)})</span>
                   </div>
                   {filtroCnpj === 'all' && <div style={{ fontSize: 9, color: primaryBlue, marginTop: 2 }}>Fonte: {fmtCNPJ(b.cnpjFonte)}</div>}
                 </div>
@@ -428,13 +438,35 @@ export default function InformeApp() {
               const filteredBens = b => filtroCnpj === 'all' || b.cnpjFonte === filtroCnpj;
               const doc = await gerarDARF(fp, bens.filter(filteredBens), `20/01/${parseInt(fp.anoCalendario) + 1}`, tipoRendimento);
               downloadPDF(doc, `DARF_${tipoRendimento}_${filtroCnpj}_${fp.anoCalendario}.pdf`);
-              setMsg('✓ DARF gerado com sucesso!');
+              setMsg('✓ Guia de auxílio gerada com sucesso!');
             } catch (e) { alert(e.message); }
             finally { setBusy(false); }
           }} disabled={busy}
-            style={{ ...S.bp, width: '100%', padding: 14, fontSize: 13, marginBottom: 32 }}>
-            <span style={{ marginRight: 6 }}>📄</span> {busy ? 'Gerando DARF...' : `Baixar Guia DARF (PDF)`}
+            style={{ ...S.bp, width: '100%', padding: 14, fontSize: 13, marginBottom: 24 }}>
+            <span style={{ marginRight: 6 }}>📄</span> {busy ? 'Gerando...' : `Baixar Guia de Auxílio (PDF)`}
           </button>
+
+          <div style={{ padding: '20px', borderRadius: 10, background: 'rgba(42,127,255,0.05)', border: '1px dashed rgba(42,127,255,0.3)', marginBottom: 32 }}>
+            <h3 style={{ fontSize: 12, fontWeight: 700, color: primaryBlue, margin: '0 0 10px', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span>🤖</span> EMISSÃO OFICIAL (SICALC BOT)
+            </h3>
+            <p style={{ fontSize: 11, color: textMuted, marginBottom: 15 }}> Use o comando abaixo no terminal para emitir o DARF oficial com QR Code direto da Receita Federal:</p>
+            <div style={{ background: '#000', padding: '12px', borderRadius: 6, position: 'relative', overflow: 'hidden' }}>
+              <code style={{ fontSize: 10, color: '#4ade80', wordBreak: 'break-all' }}>
+                node sicalc_bot.js --cpf={bens.find(b => filtroCnpj === 'all' || b.cnpjFonte === filtroCnpj)?.cnpjFonte || fp.cnpj} --code={tipoRendimento} --period=12/{fp.anoCalendario} --value={(bens.filter(b => filtroCnpj === 'all' || b.cnpjFonte === filtroCnpj).reduce((a, x) => a + x.totalIRRF, 0)).toFixed(2)}
+              </code>
+              <button
+                onClick={() => {
+                  const txt = `node sicalc_bot.js --cpf=${bens.find(b => filtroCnpj === 'all' || b.cnpjFonte === filtroCnpj)?.cnpjFonte || fp.cnpj} --code=${tipoRendimento} --period=12/${fp.anoCalendario} --value=${(bens.filter(b => filtroCnpj === 'all' || b.cnpjFonte === filtroCnpj).reduce((a, x) => a + x.totalIRRF, 0)).toFixed(2)}`;
+                  navigator.clipboard.writeText(txt);
+                  setMsg('✓ Comando copiado para a área de transferência!');
+                }}
+                style={{ position: 'absolute', right: 8, top: 8, background: primaryBlue, color: '#fff', border: 'none', borderRadius: 4, padding: '4px 8px', fontSize: 9, cursor: 'pointer' }}
+              >
+                Copiar
+              </button>
+            </div>
+          </div>
 
           <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
             <button onClick={() => setStep(4)} style={S.bs}>Voltar</button>
