@@ -374,8 +374,9 @@ export default function InformeApp() {
               <span style={{ marginRight: 6 }}>📄</span> {busy ? 'Processando...' : `Baixar Todos PDFs`}
             </button>
             <button onClick={() => exportToCSV(fp, bens.filter(b => filtroCnpj === 'all' || b.cnpjFonte === filtroCnpj), tipoRendimento)} disabled={busy}
+              title="Gera arquivo .TXT no layout IOB SAGE Digitação Diária (66 bytes/reg) para importação na Folha de Pagamento"
               style={{ ...S.bp, width: '100%', padding: 14, fontSize: 13, background: 'rgba(74,222,128,0.1)', color: '#4ade80', border: '1px solid rgba(74,222,128,0.2)' }}>
-              <span style={{ marginRight: 6 }}>📊</span> Exportar Folha (CSV)
+              <span style={{ marginRight: 6 }}>📥</span> Exportar IOB SAGE (.TXT)
             </button>
           </div>
 
@@ -453,11 +454,11 @@ export default function InformeApp() {
             <p style={{ fontSize: 11, color: textMuted, marginBottom: 15 }}> Use o comando abaixo no terminal para emitir o DARF oficial com QR Code direto da Receita Federal:</p>
             <div style={{ background: '#000', padding: '12px', borderRadius: 6, position: 'relative', overflow: 'hidden' }}>
               <code style={{ fontSize: 10, color: '#4ade80', wordBreak: 'break-all' }}>
-                node sicalc_bot.js --cpf={bens.find(b => filtroCnpj === 'all' || b.cnpjFonte === filtroCnpj)?.cnpjFonte || fp.cnpj} --code={tipoRendimento} --period=12/{fp.anoCalendario} --value={(bens.filter(b => filtroCnpj === 'all' || b.cnpjFonte === filtroCnpj).reduce((a, x) => a + x.totalIRRF, 0)).toFixed(2)}
+                cd ~/Desktop/INFORMES_2026/informe-rendimentos-app && node sicalc_bot.js --cpf={bens.find(b => filtroCnpj === 'all' || b.cnpjFonte === filtroCnpj)?.cnpjFonte || fp.cnpj} --birthdate={bens.find(b => filtroCnpj === 'all' || b.cnpjFonte === filtroCnpj)?.nascimento || 'DDMMYYYY'} --code={tipoRendimento} --period=12/{fp.anoCalendario} --value={(bens.filter(b => filtroCnpj === 'all' || b.cnpjFonte === filtroCnpj).reduce((a, x) => a + x.totalIRRF, 0)).toFixed(2)}
               </code>
               <button
                 onClick={() => {
-                  const txt = `node sicalc_bot.js --cpf=${bens.find(b => filtroCnpj === 'all' || b.cnpjFonte === filtroCnpj)?.cnpjFonte || fp.cnpj} --code=${tipoRendimento} --period=12/${fp.anoCalendario} --value=${(bens.filter(b => filtroCnpj === 'all' || b.cnpjFonte === filtroCnpj).reduce((a, x) => a + x.totalIRRF, 0)).toFixed(2)}`;
+                  const txt = `cd ~/Desktop/INFORMES_2026/informe-rendimentos-app && node sicalc_bot.js --cpf=${bens.find(b => filtroCnpj === 'all' || b.cnpjFonte === filtroCnpj)?.cnpjFonte || fp.cnpj} --birthdate=${bens.find(b => filtroCnpj === 'all' || b.cnpjFonte === filtroCnpj)?.nascimento || 'DDMMYYYY'} --code=${tipoRendimento} --period=12/${fp.anoCalendario} --value=${(bens.filter(b => filtroCnpj === 'all' || b.cnpjFonte === filtroCnpj).reduce((a, x) => a + x.totalIRRF, 0)).toFixed(2)}`;
                   navigator.clipboard.writeText(txt);
                   setMsg('✓ Comando copiado para a área de transferência!');
                 }}

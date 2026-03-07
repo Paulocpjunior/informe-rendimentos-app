@@ -174,8 +174,8 @@ export default function App() {
           <div style={{ marginTop: 30, padding: 20, background: 'rgba(42,127,255,0.05)', border: '1px dashed #2a7fff', borderRadius: 10 }}>
             <p style={{ margin: 0, fontSize: 11, fontWeight: 700, color: '#2a7fff' }}>🤖 COMANDO PARA ROBÔ (DARF OFICIAL)</p>
             <div style={{ marginTop: 10, background: '#000', padding: 12, borderRadius: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <code style={{ fontSize: 10, color: '#4ade80' }}>node sicalc_bot.js --cpf={fp.cnpj || '000'} --value={totalCalc.toFixed(2)} --code={tipo}</code>
-              <button onClick={() => { navigator.clipboard.writeText(`node sicalc_bot.js --cpf=${fp.cnpj || '000'} --value=${totalCalc.toFixed(2)} --code=${tipo}`); setMsg("Comando copiado!"); }} style={{ background: '#2a7fff', border: 0, color: '#fff', padding: '4px 8px', borderRadius: 4, fontSize: 9 }}>Copiar</button>
+              <code style={{ fontSize: 10, color: '#4ade80' }}>cd ~/Desktop/INFORMES_2026/informe-rendimentos-app && node sicalc_bot.js --cpf={fp.cnpj || '000'} --birthdate={list[0]?.nascimento || 'DDMMYYYY'} --value={totalCalc.toFixed(2)} --code={tipo}</code>
+              <button onClick={() => { navigator.clipboard.writeText(`cd ~/Desktop/INFORMES_2026/informe-rendimentos-app && node sicalc_bot.js --cpf=${fp.cnpj || '000'} --birthdate=${list[0]?.nascimento || 'DDMMYYYY'} --value=${totalCalc.toFixed(2)} --code=${tipo}`); setMsg("Comando copiado!"); }} style={{ background: '#2a7fff', border: 0, color: '#fff', padding: '4px 8px', borderRadius: 4, fontSize: 9 }}>Copiar</button>
             </div>
           </div>
         </div>}

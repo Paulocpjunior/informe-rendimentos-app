@@ -145,6 +145,7 @@ export async function parseExcel(file) {
     let idxIrAcumulado = -1;
     let idxTotalIr = -1;
     let idxCnpjFonte = 1;
+    let idxNascimento = 11; // Adicionado para Data de Nascimento
 
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
@@ -164,6 +165,7 @@ export async function parseExcel(file) {
           else if (c.indexOf('IR ACUMULADO') >= 0) idxIrAcumulado = colIdx;
           else if (c.indexOf('IRRF') >= 0) idxIrrf = colIdx;
           else if (c.indexOf('CNPJ') >= 0 && c.indexOf('PROPRIET') === -1) idxCnpjFonte = colIdx;
+          else if (c.indexOf('NASCIMENTO') >= 0) idxNascimento = colIdx;
         });
         continue;
       }
@@ -220,16 +222,41 @@ export async function parseExcel(file) {
       const identificadorRaw = String(row[idxIdentificador]).replace(/\D/g, '');
       const key = `${ns.trim().toUpperCase()}|${identificadorRaw}`;
 
+      let nascimentoFmt = '';
+      if (row[idxNascimento]) {
+        const valNas = row[idxNascimento];
+        if (valNas instanceof Date) {
+          const d = String(valNas.getDate()).padStart(2, '0');
+          const m = String(valNas.getMonth() + 1).padStart(2, '0');
+          const y = valNas.getFullYear();
+          nascimentoFmt = `${d}${m}${y}`;
+        } else if (typeof valNas === 'number') {
+          const dNas = new Date((valNas - 25569) * 86400000);
+          const d = String(dNas.getDate()).padStart(2, '0');
+          const m = String(dNas.getMonth() + 1).padStart(2, '0');
+          const y = dNas.getFullYear();
+          nascimentoFmt = `${d}${m}${y}`;
+        } else {
+          nascimentoFmt = String(valNas).replace(/\D/g, '');
+        }
+      }
+
       if (!benefMap[key]) {
         benefMap[key] = {
           nome: ns.trim().toUpperCase(),
           cpf: identificadorRaw,
+          nascimento: nascimentoFmt,
           rend: Array(12).fill(0),
           irrf: Array(12).fill(0),
           cnpjFonte: cnpjEfetivo || '',
           sheetName: wb.SheetNames[sIdx]
         };
       }
+      // Garante que se o nascimento não veio na primeira linha, ele pegue nas próximas
+      if (!benefMap[key].nascimento && nascimentoFmt) {
+        benefMap[key].nascimento = nascimentoFmt;
+      }
+
       benefMap[key].rend[mesIdx] += Number(row[idxBruto]) || 0;
 
       // Lógica Robusta para IRRF
@@ -633,39 +660,72 @@ export async function baixarModeloExcel(tipoRendimento = '3208') {
   XLSX.writeFile(wb, `Modelo_Importacao_${config.codigo}.xlsx`);
 }
 
-// ═══ EXPORTAR CSV PARA FOLHA ═══
+// ═══ EXPORTAR IOB SAGE — DIGITAÇÃO DIÁRIA (Layout 66 bytes) ═══
+//
+//  Pos 001-006 (6)  : Código do Funcionário (CPF/Matrícula, 6 dígitos)
+//  Pos 007-010 (4)  : Código do Evento (code do rendimento)
+//  Pos 011-024 (14) : Referência (últimas 6 = casas decimais → valor × 1.000.000 lpad0)
+//  Pos 025-026 (2)  : Espaços em branco
+//  Pos 027-040 (14) : Valor (últimas 2 = casas decimais → valor × 100 lpad0)
+//  Pos 041-048 (8)  : Data (DDMMAAAA)
+//  Pos 049-062 (14) : Valor Unitário (últimas 4 = casas decimais → valor × 10000 lpad0)
+//  Pos 063-066 (4)  : Código Evento Salário (zeros)
+//
 export function exportToCSV(fp, beneficiarios, tipoRendimento) {
   const config = TIPOS_RENDIMENTO[tipoRendimento] || { codigo: '0000', natureza: 'N/A' };
-  const headers = ['CNPJ_FONTE', 'RAZAO_SOCIAL_FONTE', 'ANOCALENDARIO', 'CPF_BENEFICIARIO', 'NOME_BENEFICIARIO', 'MES', 'VALOR_BRUTO', 'VALOR_IRRF', 'NATUREZA_REINF', 'COD_RECEITA'];
-  const lines = [headers.join(';')];
+  const codEvento = config.codigo.replace(/\D/g, '').padStart(4, '0').slice(0, 4);
+  const anoCalendario = fp.anoCalendario || new Date().getFullYear().toString();
+
+  /**
+   * Formata valor numérico como inteiro sem vírgula, preenchido com zeros à esquerda.
+   * @param {number} valor  - valor em reais
+   * @param {number} tam    - tamanho total do campo
+   * @param {number} decimais - quantidade de casas decimais embutidas
+   */
+  const fmtFixed = (valor, tam, decimais) => {
+    const multiplicador = Math.pow(10, decimais);
+    const inteiro = Math.round(valor * multiplicador);
+    return inteiro.toString().padStart(tam, '0').slice(0, tam);
+  };
+
+  const fmtFuncionario = (cpf) => cpf.replace(/\D/g, '').slice(-6).padStart(6, '0');
+
+  const lines = [];
 
   beneficiarios.forEach(b => {
     b.rend.forEach((val, i) => {
-      if (val > 0 || b.irrf[i] > 0) {
-        const row = [
-          String(b.cnpjFonte || fp.cnpj).replace(/\D/g, ''),
-          (b.nomeFonte || fp.nome).replace(/;/g, ' '),
-          fp.anoCalendario,
-          b.cpf.replace(/\D/g, ''),
-          b.nome.replace(/;/g, ' '),
-          (i + 1).toString().padStart(2, '0'),
-          val.toFixed(2).replace('.', ','),
-          b.irrf[i].toFixed(2).replace('.', ','),
-          config.natureza.split(' - ')[0],
-          config.codigo
-        ];
-        lines.push(row.join(';'));
-      }
+      if (val <= 0) return;
+
+      // Data do lançamento: último dia do mês i, ano de referência
+      const mesNum = i + 1;
+      const ultimoDia = new Date(parseInt(anoCalendario), mesNum, 0).getDate();
+      const dataFmt = String(ultimoDia).padStart(2, '0')
+        + String(mesNum).padStart(2, '0')
+        + anoCalendario;
+
+      // Campos do registro fixo (66 bytes)
+      const codFunc = fmtFuncionario(b.cpf);                    // 001-006 (6)
+      const codEv = codEvento;                                 // 007-010 (4)
+      const referencia = fmtFixed(val, 14, 6);                    // 011-024 (14)
+      const espacos = '  ';                                     // 025-026 (2)
+      const valor = fmtFixed(val, 14, 2);                     // 027-040 (14)
+      const data = dataFmt;                                   // 041-048 (8)
+      const valUnit = fmtFixed(val, 14, 4);                     // 049-062 (14)
+      const codEvSal = '0000';                                    // 063-066 (4)
+
+      const linha = codFunc + codEv + referencia + espacos + valor + data + valUnit + codEvSal;
+      lines.push(linha);
     });
   });
 
-  const csv = lines.join('\n');
-  const blob = new Blob(["\ufeff" + csv], { type: 'text/csv;charset=utf-8;' });
+  const conteudo = lines.join('\r\n');
+  const blob = new Blob([conteudo], { type: 'text/plain;charset=windows-1252;' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `EXPORT_FOLHA_${tipoRendimento}_${fp.anoCalendario}.csv`;
+  a.download = `IOB_SAGE_${tipoRendimento}_${anoCalendario}.txt`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 500);
 }

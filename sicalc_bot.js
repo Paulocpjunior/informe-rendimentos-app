@@ -27,7 +27,7 @@ async function runSicalcBot() {
     }, {});
 
     if (!args.cpf || !args.code || !args.period || !args.value) {
-        console.log('\nUso: node sicalc_bot.js --cpf=000.000.000-00 --code=3208 --period=01/2025 --value=1500.00');
+        console.log('\nUso: node sicalc_bot.js --cpf=000.000.000-00 --birthdate=01011980 --code=3208 --period=01/2025 --value=1500.00');
         process.exit(1);
     }
 
@@ -40,9 +40,12 @@ async function runSicalcBot() {
         await page.goto('https://sicalc.receita.fazenda.gov.br/sicalc/rapido/contribuinte');
 
         // PASSO 1 - Identificação
-        console.log('🔹 Preenchendo CPF...');
+        console.log('🔹 Preenchendo CPF e Data de Nascimento...');
         await page.click('#optionPF');
         await page.fill('#cpfFormatado', args.cpf);
+        if (args.birthdate) {
+            await page.fill('#nascimento', args.birthdate);
+        }
 
         console.log('\n⚠️  Aguardando resolução do hCaptcha...');
         console.log('Resolva o desafio e o script continuará automaticamente assim que a página mudar.');
