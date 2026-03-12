@@ -223,7 +223,7 @@ export default function InformeApp() {
           <div style={{ width: 44, height: 44, borderRadius: 10, background: '#1d4ed8', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 800, color: '#fff', boxShadow: '0 0 15px rgba(29,78,216,0.3)' }}>SP</div>
           <div>
             <h1 style={{ margin: 0, fontSize: 18, fontWeight: 700, letterSpacing: '-0.5px' }}>Contábil <span style={{ fontWeight: 400, marginLeft: 8, opacity: 0.9 }}>Gerador de Informe de Rendimentos</span></h1>
-            <p style={{ margin: 0, fontSize: 11, color: textMuted, marginTop: 4, letterSpacing: '0.5px' }}>EFD-REINF • R-4010 • IN RFB 2.060/2021 <span style={{ fontSize: 10, color: '#4ade80', marginLeft: 12 }}>v1.3.0</span></p>
+            <p style={{ margin: 0, fontSize: 11, color: textMuted, marginTop: 4, letterSpacing: '0.5px' }}>EFD-REINF • R-4010 • IN RFB 2.060/2021 <span style={{ fontSize: 10, color: '#4ade80', marginLeft: 12 }}>v1.3.1</span></p>
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
