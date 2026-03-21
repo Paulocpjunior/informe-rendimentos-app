@@ -2,7 +2,6 @@
   "name": "informe-rendimentos",
   "version": "1.0.0",
   "private": true,
-  "homepage": "https://Paulocpjunior.github.io/informe-rendimentos-app",
   "description": "Gerador de Informe de Rendimentos - Natureza 13002 - IN RFB 2.060/2021",
   "dependencies": {
     "firebase": "^10.7.1",
@@ -37,5 +36,6 @@
   },
   "devDependencies": {
     "gh-pages": "^6.3.0"
-  }
+  },
+  "homepage": "."
 }
