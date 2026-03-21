@@ -220,7 +220,7 @@ export default function InformeApp() {
     <div style={{ display:'flex', minHeight:'100vh', fontFamily:"'DM Sans',-apple-system,sans-serif", background:'#080f1c', color:'#e8edf5' }}>
       <aside style={{ width:220, minHeight:'100vh', background:'#0b1220', borderRight:'1px solid rgba(255,255,255,0.06)', display:'flex', flexDirection:'column', position:'fixed', left:0, top:0, bottom:0, zIndex:50 }}>
         <div style={{ display:'flex', alignItems:'center', gap:12, padding:'22px 18px 18px', borderBottom:'1px solid rgba(255,255,255,0.06)' }}>
-          <div style={{ width:40, height:40, borderRadius:10, background:'linear-gradient(135deg,#2a7fff,#1a5cbf)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, fontWeight:700, color:'#fff', boxShadow:'0 4px 14px rgba(42,127,255,0.35)', flexShrink:0 }}>S</div>
+          <div style={{ width:40, height:40, borderRadius:10, background:'#0a1525', borderRadius:10, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, overflow:'hidden' }}><img src='/logo.png' alt='SP' style={{width:36,height:36,objectFit:'contain'}}/></div>
           <div>
             <div style={{ fontSize:14, fontWeight:700, color:'#e8edf5', letterSpacing:'-0.3px' }}>SP Contábil</div>
             <div style={{ fontSize:10, fontWeight:600, color:'#4a5a70', letterSpacing:'0.06em', textTransform:'uppercase' }}>Gestão Fiscal</div>
