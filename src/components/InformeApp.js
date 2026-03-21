@@ -217,24 +217,40 @@ export default function InformeApp() {
   );
 
   return (
-    <div style={{ minHeight: '100vh', background: mainBg, color: textWhite, padding: '0', fontFamily: "'Inter', sans-serif" }}>
-      <header style={{ background: darkNav, padding: '20px 60px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: `1px solid ${borderCol}` }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          <div style={{ width: 44, height: 44, borderRadius: 10, background: '#1d4ed8', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 800, color: '#fff', boxShadow: '0 0 15px rgba(29,78,216,0.3)' }}>SP</div>
+    <div style={{ display:'flex', minHeight:'100vh', fontFamily:"'DM Sans',-apple-system,sans-serif", background:'#080f1c', color:'#e8edf5' }}>
+      <aside style={{ width:220, minHeight:'100vh', background:'#0b1220', borderRight:'1px solid rgba(255,255,255,0.06)', display:'flex', flexDirection:'column', position:'fixed', left:0, top:0, bottom:0, zIndex:50 }}>
+        <div style={{ display:'flex', alignItems:'center', gap:12, padding:'22px 18px 18px', borderBottom:'1px solid rgba(255,255,255,0.06)' }}>
+          <div style={{ width:40, height:40, borderRadius:10, background:'linear-gradient(135deg,#2a7fff,#1a5cbf)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, fontWeight:700, color:'#fff', boxShadow:'0 4px 14px rgba(42,127,255,0.35)', flexShrink:0 }}>S</div>
           <div>
-            <h1 style={{ margin: 0, fontSize: 18, fontWeight: 700, letterSpacing: '-0.5px' }}>Contábil <span style={{ fontWeight: 400, marginLeft: 8, opacity: 0.9 }}>Gerador de Informe de Rendimentos</span></h1>
-            <p style={{ margin: 0, fontSize: 11, color: textMuted, marginTop: 4, letterSpacing: '0.5px' }}>EFD-REINF • R-4010 • IN RFB 2.060/2021 <span style={{ fontSize: 10, color: '#4ade80', marginLeft: 12 }}>v1.3.1</span></p>
+            <div style={{ fontSize:14, fontWeight:700, color:'#e8edf5', letterSpacing:'-0.3px' }}>SP Contábil</div>
+            <div style={{ fontSize:10, fontWeight:600, color:'#4a5a70', letterSpacing:'0.06em', textTransform:'uppercase' }}>Gestão Fiscal</div>
           </div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
-          <span style={{ fontSize: 13, color: textMuted, borderRight: `1px solid ${borderCol}`, paddingRight: 24 }}>{user.email}</span>
-          <button onClick={logout} style={{ background: 'rgba(255,255,255,0.05)', color: textWhite, border: `1px solid ${borderCol}`, padding: '8px 18px', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span>🚪</span> Sair
-          </button>
+        <div style={{ display:'flex', alignItems:'center', gap:10, margin:'12px 10px', padding:'12px 14px', background:'#111e33', borderRadius:10, border:'1px solid rgba(255,255,255,0.06)' }}>
+          <div style={{ width:34, height:34, borderRadius:'50%', background:'linear-gradient(135deg,#1d4ed8,#2a7fff)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:12, fontWeight:700, color:'#fff', flexShrink:0 }}>{user.email?.slice(0,2).toUpperCase()}</div>
+          <div style={{ overflow:'hidden' }}>
+            <div style={{ fontSize:12.5, fontWeight:600, color:'#e8edf5', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', maxWidth:120 }}>{user.email?.split('@')[0]}</div>
+            <div style={{ fontSize:10.5, color:'#4a5a70' }}>Operador</div>
+          </div>
         </div>
-      </header>
-
-      <div style={{ maxWidth: 1000, margin: '60px auto', padding: '0 20px' }}>
+        <nav style={{ flex:1, padding:'6px 10px', display:'flex', flexDirection:'column', gap:2 }}>
+          {[{num:1,icon:'\ud83c\udfe2',label:'Fonte Pagadora'},{num:2,icon:'\ud83d\udccb',label:'Tipo'},{num:3,icon:'\ud83d\udcca',label:'Import'},{num:4,icon:'\ud83d\udc65',label:'PDFs'},{num:5,icon:'\ud83e\uddfe',label:'DARF'},{num:6,icon:'\ud83d\udee1',label:'REINF'}].map(s => (
+            <button key={s.num} onClick={() => canNavigate(s.num) && setStep(s.num)} style={{ display:'flex', alignItems:'center', gap:10, padding:'9px 12px', borderRadius:10, border:'1px solid transparent', fontSize:12.5, fontWeight:500, cursor: canNavigate(s.num) ? 'pointer' : 'default', transition:'all 0.15s', textAlign:'left', width:'100%', background: step===s.num ? 'rgba(42,127,255,0.15)' : step>s.num ? 'rgba(42,200,100,0.08)' : 'transparent', color: step===s.num ? '#fff' : step>s.num ? '#2ac864' : '#4a5a70', borderColor: step===s.num ? 'rgba(42,127,255,0.4)' : step>s.num ? 'rgba(42,200,100,0.15)' : 'transparent' }}>
+              <span style={{ fontSize:14, flexShrink:0 }}>{step > s.num ? '\u2713' : s.icon}</span>
+              <span>{s.label}</span>
+              {step===s.num && <span style={{ marginLeft:'auto', width:6, height:6, borderRadius:'50%', background:'#2a7fff', flexShrink:0 }}/>}
+            </button>
+          ))}
+        </nav>
+        <div style={{ padding:'12px 10px 20px', borderTop:'1px solid rgba(255,255,255,0.06)' }}>
+          <div style={{ display:'flex', alignItems:'center', gap:8, padding:'6px 12px', fontSize:11.5, color:'#2ac864', marginBottom:6 }}>
+            <span style={{ width:7, height:7, borderRadius:'50%', background:'#2ac864', display:'inline-block', flexShrink:0 }}/>Conectado
+          </div>
+          <button onClick={logout} style={{ display:'flex', alignItems:'center', gap:8, width:'100%', padding:'9px 12px', borderRadius:10, fontSize:12.5, background:'transparent', color:'#7a8fa6', border:'1px solid rgba(255,255,255,0.06)', cursor:'pointer' }}>\ud83d\udeaa Sair</button>
+        </div>
+      </aside>
+      <div style={{ marginLeft:220, flex:1, minHeight:'100vh' }}>
+      <div style={{ maxWidth:1000, margin:'40px auto', padding:'0 32px' }}>
 
         <StepIndicator
           current={step}
@@ -474,6 +490,7 @@ export default function InformeApp() {
           </div>
         </div>}
       </div>
+    </div>
     </div>
   );
 }
