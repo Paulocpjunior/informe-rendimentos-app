@@ -155,7 +155,14 @@ export async function parseExcel(file) {
 
       // Detectar Layout e Mapear Colunas Dinamicamente
       const rowStr = JSON.stringify(row).toUpperCase();
-      if (rowStr.indexOf('LOCALIDADE') >= 0 && (rowStr.indexOf('CNPJ') >= 0 || rowStr.indexOf('CPF') >= 0)) {
+      const isHeaderRow = (
+        (rowStr.indexOf('LOCALIDADE') >= 0 || rowStr.indexOf('EMPRESA') >= 0) &&
+        (rowStr.indexOf('CNPJ') >= 0 || rowStr.indexOf('CPF') >= 0)
+      ) || (
+        rowStr.indexOf('CNPJ') >= 0 && rowStr.indexOf('CPF') >= 0 &&
+        rowStr.indexOf('NOME') >= 0 && rowStr.indexOf('BRUTO') >= 0
+      );
+      if (isHeaderRow) {
         // Mapeia cada coluna pelo nome
         row.forEach((cell, colIdx) => {
           const c = String(cell).toUpperCase().trim();
