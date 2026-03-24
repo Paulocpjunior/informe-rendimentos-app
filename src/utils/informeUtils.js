@@ -64,19 +64,19 @@ export function calcularIRRF(valorBruto) {
 export const MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
 
 export const TIPOS_RENDIMENTO = {
-  '3208': { codigo: '3208', titulo: 'Aluguéis e Royalties', natureza: '13002 - Aluguéis PF', descInfo: '13002 (Aluguel PF) • 3208' },
-  '3288': { codigo: '3288', titulo: 'Aluguéis (Código Alternativo)', natureza: '13002 - Aluguéis PF', descInfo: '13002 (Aluguel PF) • 3288' },
-  '9478': { codigo: '9478', titulo: 'Aluguel/Royalties (Exterior)', natureza: '13002 - Aluguéis (Res. Exterior)', descInfo: '13002 (Aluguel Ext) • 9478' },
-  '0588': { codigo: '0588', titulo: 'Rendimento Trabalho s/ Vínculo', natureza: '10004 - Trabalho s/ Vínculo', descInfo: '10004 (Autônomo) • 0588' },
-  '0561': { codigo: '0561', titulo: 'Trabalho Assalariado', natureza: '10001 - Trabalho Assalariado', descInfo: '10001 (CLT) • 0561' },
-  '1708': { codigo: '1708', titulo: 'Serviços Profissionais (R-4010)', natureza: '13005 - Serviços Profissionais', descInfo: '13005 (Serviços) • 1708' },
-  '8045': { codigo: '8045', titulo: 'Comissões e Corretagens (R-4010)', natureza: '13008 - Comissões PF', descInfo: '13008 (Comissões) • 8045' },
-  '10011': { codigo: '10011', titulo: 'Honorários Sucumbência', natureza: '10011 - Honorários Adv.', descInfo: '10011 (Sucumbên.) • 10011' },
-  '12001': { codigo: '1841', titulo: 'Lucros e Dividendos (R-4010)', natureza: '12001 - Lucros e Dividendos', descInfo: '12001 (Lucros) • 1841' },
-  '10002': { codigo: '0561', titulo: 'Aposentadoria / Pensão', natureza: '10002 - Aposentadoria', descInfo: '10002 (Aposent.) • 0561' },
-  '13001': { codigo: '0924', titulo: 'Prêmios e Sorteios', natureza: '13001 - Prêmios', descInfo: '13001 (Prêmios) • 0924' },
-  '10003': { codigo: '0561', titulo: 'Prebenda / Ministro Religioso', natureza: '10003 - Ministro de Confissão Religiosa', descInfo: '10003 (Prebenda) • 0561' },
-  '12002': { codigo: '---', titulo: 'Ajuda de Custo / Diárias', natureza: '12002 - Diárias e Ajuda de Custo', descInfo: '12002 (Isento) • S/ Retenção' }
+  '3208': { codigo: '3208', titulo: 'Aluguéis e Royalties', natureza: '13002 - Aluguéis PF', descInfo: '13002 (Aluguel PF) • 3208', isento: false },
+  '3288': { codigo: '3288', titulo: 'Aluguéis (Código Alternativo)', natureza: '13002 - Aluguéis PF', descInfo: '13002 (Aluguel PF) • 3288', isento: false },
+  '9478': { codigo: '9478', titulo: 'Aluguel/Royalties (Exterior)', natureza: '13002 - Aluguéis (Res. Exterior)', descInfo: '13002 (Aluguel Ext) • 9478', isento: false },
+  '0588': { codigo: '0588', titulo: 'Rendimento Trabalho s/ Vínculo', natureza: '10004 - Trabalho s/ Vínculo', descInfo: '10004 (Autônomo) • 0588', isento: false },
+  '0561': { codigo: '0561', titulo: 'Trabalho Assalariado', natureza: '10001 - Trabalho Assalariado', descInfo: '10001 (CLT) • 0561', isento: false },
+  '1708': { codigo: '1708', titulo: 'Serviços Profissionais (R-4010)', natureza: '13005 - Serviços Profissionais', descInfo: '13005 (Serviços) • 1708', isento: false },
+  '8045': { codigo: '8045', titulo: 'Comissões e Corretagens (R-4010)', natureza: '13008 - Comissões PF', descInfo: '13008 (Comissões) • 8045', isento: false },
+  '10011': { codigo: '10011', titulo: 'Honorários Sucumbência', natureza: '10011 - Honorários Adv.', descInfo: '10011 (Sucumbên.) • 10011', isento: false },
+  '12001': { codigo: '1841', titulo: 'Lucros e Dividendos (R-4010)', natureza: '12001 - Lucros e Dividendos', descInfo: '12001 (Lucros) • 1841', isento: true, linhIsento: 5, descIsento: 'Lucros e dividendos apurados a partir de 01/01/1996' },
+  '10002': { codigo: '0561', titulo: 'Aposentadoria / Pensão', natureza: '10002 - Aposentadoria', descInfo: '10002 (Aposent.) • 0561', isento: false },
+  '13001': { codigo: '0924', titulo: 'Prêmios e Sorteios', natureza: '13001 - Prêmios', descInfo: '13001 (Prêmios) • 0924', isento: false },
+  '10003': { codigo: '0561', titulo: 'Prebenda / Ministro Religioso', natureza: '10003 - Ministro de Confissão Religiosa', descInfo: '10003 (Prebenda) • 0561', isento: false },
+  '12002': { codigo: '---', titulo: 'Ajuda de Custo / Diárias', natureza: '12002 - Diárias e Ajuda de Custo', descInfo: '12002 (Isento) • S/ Retenção', isento: true, linhIsento: 6, descIsento: 'Ajuda de custo e diárias (não tributáveis)' }
 };
 
 // ═══ BANCO INTERNO CNPJ ═══
@@ -363,12 +363,14 @@ export async function gerarPDF(fp, beneficiarios, idx, tipoRendimento = '3208') 
     doc.setTextColor(0); doc.setFontSize(10.5); doc.setFont('helvetica', 'bold');
     doc.text(b.nome, ml + 2.5, y + 8); y += 12.5;
 
-    // Seção 3 - Rendimentos
+    // Seção 3 - Rendimentos Tributáveis (zerado se isento)
     doc.setFillColor(43, 76, 126); doc.rect(ml, y, cw, 7, 'F');
     doc.setTextColor(255); doc.setFontSize(8.5);
     doc.text('3   RENDIMENTOS TRIBUTÁVEIS, DEDUÇÕES E IMPOSTO SOBRE A RENDA RETIDO NA FONTE', ml + 3, y + 5.2); y += 7;
     const nW = 8, vW = 30, dW = cw - nW - vW;
-    const q3 = [['1', 'Total dos rendimentos (inclusive férias)', b.totalRend], ['2', 'Contribuição previdenciária oficial', 0], ['3', 'Previdência complementar, FAPI', 0], ['4', 'Pensão alimentícia', 0], ['5', 'Imposto sobre a renda retido na fonte', b.totalIRRF]];
+    const rendTrib = config.isento ? 0 : b.totalRend;
+    const irrfTrib = config.isento ? 0 : b.totalIRRF;
+    const q3 = [['1', 'Total dos rendimentos (inclusive férias)', rendTrib], ['2', 'Contribuição previdenciária oficial', 0], ['3', 'Previdência complementar, FAPI', 0], ['4', 'Pensão alimentícia', 0], ['5', 'Imposto sobre a renda retido na fonte', irrfTrib]];
     q3.forEach(([n, desc, val]) => {
       doc.setFillColor(245); doc.rect(ml, y, nW, 8.5, 'FD');
       doc.setTextColor(0); doc.setFontSize(7.5); doc.setFont('helvetica', 'bold');
@@ -380,17 +382,35 @@ export async function gerarPDF(fp, beneficiarios, idx, tipoRendimento = '3208') 
       doc.text(fmtMoeda(val), ml + cw - 2.5, y + 5.8, { align: 'right' }); y += 8.5;
     }); y += 2.5;
 
-    // Seção 4
+    // Seção 4 - Rendimentos Isentos
+    const sec4Labels = [
+      'Rendimentos de caderneta de poupança, letras hipotecárias e outros',
+      'Parcela isenta de aposentadoria, reserva remunerada, reforma e pensão',
+      'Pensão / proventos de aposentadoria (portador de moléstia grave)',
+      'Indenizações por rescisão de contrato de trabalho / FGTS',
+      'Lucros e dividendos apurados a partir de 01/01/1996',
+      'Outros (ajuda de custo, diárias, bolsas, etc.)',
+      'Total dos rendimentos isentos e não tributáveis',
+    ];
     doc.setFillColor(43, 76, 126); doc.rect(ml, y, cw, 7, 'F');
     doc.setTextColor(255); doc.setFontSize(8.5); doc.setFont('helvetica', 'bold');
     doc.text('4   RENDIMENTOS ISENTOS E NÃO TRIBUTÁVEIS', ml + 3, y + 5.2); y += 7;
+    let totalIsento = 0;
     for (let n = 1; n <= 7; n++) {
-      doc.setFillColor(245); doc.rect(ml, y, nW, 6, 'FD');
+      const isLinhaIsenta = config.isento && config.linhIsento === n;
+      const val = isLinhaIsenta ? b.totalRend : (n === 7 ? totalIsento : 0);
+      if (isLinhaIsenta) totalIsento += b.totalRend;
+      doc.setFillColor(isLinhaIsenta ? 220 : 245, isLinhaIsenta ? 240 : 245, isLinhaIsenta ? 220 : 245);
+      doc.rect(ml, y, nW, 7, 'FD');
       doc.setTextColor(0); doc.setFontSize(6); doc.setFont('helvetica', 'bold');
-      doc.text(String(n), ml + 4, y + 4);
-      doc.rect(ml + nW, y, dW, 6, 'S'); doc.rect(ml + nW + dW, y, vW, 6, 'S');
-      doc.setFont('helvetica', 'normal'); doc.setFontSize(6.5);
-      doc.text('0,00', ml + cw - 2.5, y + 4, { align: 'right' }); y += 6;
+      doc.text(String(n), ml + 4, y + 4.5);
+      doc.rect(ml + nW, y, dW, 7, 'S');
+      doc.setFontSize(6); doc.setFont('helvetica', isLinhaIsenta ? 'bold' : 'normal');
+      doc.setTextColor(isLinhaIsenta ? 0 : 100);
+      doc.text(sec4Labels[n - 1], ml + nW + 2, y + 4.5);
+      doc.rect(ml + nW + dW, y, vW, 7, 'S');
+      doc.setTextColor(0); doc.setFontSize(7.5); doc.setFont('helvetica', (isLinhaIsenta || n === 7) ? 'bold' : 'normal');
+      doc.text(fmtMoeda(val), ml + cw - 2.5, y + 4.5, { align: 'right' }); y += 7;
     } y += 2.5;
 
     // Seção 5
