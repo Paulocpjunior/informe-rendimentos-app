@@ -155,19 +155,28 @@ export async function parseExcel(file) {
 
       // Detectar Layout e Mapear Colunas Dinamicamente
       const rowStr = JSON.stringify(row).toUpperCase();
-      if (rowStr.indexOf('LOCALIDADE') >= 0 && (rowStr.indexOf('CNPJ') >= 0 || rowStr.indexOf('CPF') >= 0)) {
+      const isHeaderRow = (
+        (rowStr.indexOf('LOCALIDADE') >= 0 || rowStr.indexOf('EMPRESA') >= 0) &&
+        (rowStr.indexOf('CNPJ') >= 0 || rowStr.indexOf('CPF') >= 0)
+      ) || (
+        rowStr.indexOf('CNPJ') >= 0 && rowStr.indexOf('CPF') >= 0 &&
+        rowStr.indexOf('NOME') >= 0 && rowStr.indexOf('BRUTO') >= 0
+      );
+      if (isHeaderRow) {
         // Mapeia cada coluna pelo nome
         row.forEach((cell, colIdx) => {
-          const c = String(cell).toUpperCase();
-          if (c.indexOf('NOME') >= 0) idxNome = colIdx;
-          else if (c.indexOf('CPF') >= 0 || c.indexOf('IDENTIFICADOR') >= 0 || (c.indexOf('CNPJ') >= 0 && c.indexOf('PROPRIET') >= 0)) idxIdentificador = colIdx;
+          const c = String(cell).toUpperCase().trim();
+          // Ignora colunas de dependentes para não sobrescrever os índices do beneficiário
+          const isDependente = c.indexOf('DEPENDENTE') >= 0 || c.indexOf('DEP.') >= 0 || c.indexOf(' DEP') >= 0;
+          if (!isDependente && c.indexOf('NOME') >= 0) idxNome = colIdx;
+          else if (!isDependente && (c.indexOf('CPF') >= 0 || c.indexOf('IDENTIFICADOR') >= 0 || (c.indexOf('CNPJ') >= 0 && c.indexOf('PROPRIET') >= 0))) idxIdentificador = colIdx;
           else if (c.indexOf('APURAÇ') >= 0 || c.indexOf('APURAC') >= 0) idxApuracao = colIdx;
           else if (c.indexOf('BRUTO') >= 0) idxBruto = colIdx;
           else if (c.indexOf('TOTAL DE IR') >= 0) idxTotalIr = colIdx;
           else if (c.indexOf('IR ACUMULADO') >= 0) idxIrAcumulado = colIdx;
           else if (c.indexOf('IRRF') >= 0) idxIrrf = colIdx;
           else if (c.indexOf('CNPJ') >= 0 && c.indexOf('PROPRIET') === -1) idxCnpjFonte = colIdx;
-          else if (c.indexOf('NASCIMENTO') >= 0) idxNascimento = colIdx;
+          else if (!isDependente && c.indexOf('NASCIMENTO') >= 0) idxNascimento = colIdx;
         });
         continue;
       }
