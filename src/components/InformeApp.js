@@ -4,7 +4,8 @@ import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import {
   validarCNPJ, validarCPF, fmtMoeda, fmtCPF, fmtCNPJ, calcularIRRF,
-  MESES, TIPOS_RENDIMENTO, CNPJ_DB, parseExcel, gerarPDF, downloadPDF, fetchCNPJ, gerarDARF, baixarModeloExcel, exportToCSV
+  MESES, TIPOS_RENDIMENTO, CNPJ_DB, parseExcel, gerarPDF, downloadPDF, fetchCNPJ, gerarDARF, baixarModeloExcel, exportToCSV,
+  parseIgrejaFolha, exportFolhaValores, exportFolhaPonto, loadCodigosSalvos, saveCodigosSalvos
 } from '../utils/informeUtils';
 
 export default function InformeApp() {
@@ -23,6 +24,16 @@ export default function InformeApp() {
   const [drag, setDrag] = useState(false);
   const [msg, setMsg] = useState('');
   const fR = useRef(null);
+
+  // ── ESTADO FOLHA IOB ────────────────────────────────────────────────────────
+  const [folhaEmps, setFolhaEmps]       = useState([]);   // funcionários do xlsx
+  const [folhaCods, setFolhaCods]       = useState(() => loadCodigosSalvos());
+  const [folhaEvento, setFolhaEvento]   = useState('1105');
+  const [folhaComp, setFolhaComp]       = useState('');   // ex: "03/2026"
+  const [folhaBusy, setFolhaBusy]       = useState(false);
+  const [folhaMsg, setFolhaMsg]         = useState('');
+  const [folhaDrag, setFolhaDrag]       = useState(false);
+  const fRFolha = useRef(null);
 
   // RESET DE SEGURANÇA NO MOUNT
   React.useEffect(() => {
@@ -172,7 +183,8 @@ export default function InformeApp() {
 
   // Validação de navegação: impede pular passos para frente sem preenchimento
   const canNavigate = (target) => {
-    if (target < step) return true; // Sempre pode voltar
+    if (target === 7) return true; // Folha IOB sempre acessível
+    if (target < step) return true;
     if (target === 1) return true;
     if (target === 2) return fp.nome && fp.cnpj;
     if (target === 3) return fp.nome && fp.cnpj && tipoRendimento;
@@ -241,6 +253,12 @@ export default function InformeApp() {
               {step===s.num && <span style={{ marginLeft:'auto', width:6, height:6, borderRadius:'50%', background:'#2a7fff', flexShrink:0 }}/>}
             </button>
           ))}
+          <div style={{ margin:'8px 4px', borderTop:'1px solid rgba(255,255,255,0.06)' }}/>
+          <button onClick={() => setStep(7)} style={{ display:'flex', alignItems:'center', gap:10, padding:'9px 12px', borderRadius:10, border:`1px solid ${step===7 ? 'rgba(251,191,36,0.4)' : 'transparent'}`, fontSize:12.5, fontWeight:600, cursor:'pointer', transition:'all 0.15s', textAlign:'left', width:'100%', background: step===7 ? 'rgba(251,191,36,0.12)' : 'transparent', color: step===7 ? '#fbbf24' : '#6b7a90' }}>
+            <span style={{ fontSize:14, flexShrink:0 }}>📤</span>
+            <span>Folha IOB</span>
+            {step===7 && <span style={{ marginLeft:'auto', width:6, height:6, borderRadius:'50%', background:'#fbbf24', flexShrink:0 }}/>}
+          </button>
         </nav>
         <div style={{ padding:'12px 10px 20px', borderTop:'1px solid rgba(255,255,255,0.06)' }}>
           <div style={{ display:'flex', alignItems:'center', gap:8, padding:'6px 12px', fontSize:11.5, color:'#2ac864', marginBottom:6 }}>
@@ -489,6 +507,157 @@ export default function InformeApp() {
             <button onClick={() => setStep(4)} style={S.bs}>Voltar</button>
           </div>
         </div>}
+
+        {/* ══════════════ STEP 7 — FOLHA IOB ══════════════ */}
+        {step === 7 && <div style={S.card}>
+          <div style={{ marginBottom: 24 }}>
+            <div style={{ fontSize: 20, fontWeight: 700, color: '#fbbf24', marginBottom: 4 }}>📤 Folha IOB — Importação Sage Folhamatic</div>
+            <div style={{ fontSize: 12, color: '#6b7a90' }}>Suba a planilha da igreja, confira os códigos salvos e baixe os dois arquivos .txt prontos para importação.</div>
+          </div>
+
+          {/* Upload xlsx */}
+          <div style={{ marginBottom: 20 }}>
+            <label style={S.lb}>1 · Planilha da Igreja (.xlsx)</label>
+            <input ref={fRFolha} type="file" accept=".xlsx,.xls" style={{ display:'none' }}
+              onChange={async e => {
+                const f = e.target.files[0]; if (!f) return;
+                setFolhaBusy(true); setFolhaMsg('');
+                try {
+                  const emps = await parseIgrejaFolha(f);
+                  const saved = loadCodigosSalvos();
+                  const merged = emps.map(emp => ({ ...emp, codigo: saved[emp.cpf] || '' }));
+                  setFolhaEmps(merged);
+                  // Auto-detect competência from filename or first row
+                  const m = f.name.match(/(\d{2})[_\-\/](\d{4})/);
+                  if (m) setFolhaComp(`${m[1]}/${m[2]}`);
+                  setFolhaMsg(`✓ ${merged.length} funcionários carregados. ${merged.filter(e=>!e.codigo).length} sem código cadastrado.`);
+                } catch(err) { setFolhaMsg('Erro ao ler planilha: ' + err.message); }
+                setFolhaBusy(false);
+              }}
+            />
+            <div
+              onClick={() => fRFolha.current?.click()}
+              onDragOver={e => { e.preventDefault(); setFolhaDrag(true); }}
+              onDragLeave={() => setFolhaDrag(false)}
+              onDrop={async e => {
+                e.preventDefault(); setFolhaDrag(false);
+                const f = e.dataTransfer.files[0]; if (!f) return;
+                setFolhaBusy(true); setFolhaMsg('');
+                try {
+                  const emps = await parseIgrejaFolha(f);
+                  const saved = loadCodigosSalvos();
+                  const merged = emps.map(emp => ({ ...emp, codigo: saved[emp.cpf] || '' }));
+                  setFolhaEmps(merged);
+                  setFolhaMsg(`✓ ${merged.length} funcionários carregados.`);
+                } catch(err) { setFolhaMsg('Erro: ' + err.message); }
+                setFolhaBusy(false);
+              }}
+              style={{ border:`2px dashed ${folhaDrag ? '#fbbf24' : 'rgba(251,191,36,0.25)'}`, borderRadius:10, padding:'28px 20px', textAlign:'center', cursor:'pointer', background: folhaDrag ? 'rgba(251,191,36,0.05)' : 'rgba(255,255,255,0.02)', transition:'all 0.2s' }}>
+              {folhaBusy ? <span style={{color:'#fbbf24',fontSize:13}}>⏳ Processando...</span>
+                : <><div style={{fontSize:28}}>📊</div><div style={{fontSize:13,color:'#e8edf5',fontWeight:500,marginTop:8}}>Arraste o Excel (.xlsx)</div><div style={{fontSize:11,color:'#6b7a90',marginTop:4}}>ou clique para selecionar</div></>}
+            </div>
+          </div>
+
+          {/* Config */}
+          <div style={{ display:'flex', gap:16, marginBottom:20 }}>
+            <div style={{ flex:1 }}>
+              <label style={S.lb}>2 · Competência (ex: 03/2026)</label>
+              <input value={folhaComp} onChange={e => setFolhaComp(e.target.value)} placeholder="MM/AAAA" style={{ ...S.inp, borderColor:'rgba(251,191,36,0.3)' }}/>
+            </div>
+            <div style={{ flex:1 }}>
+              <label style={S.lb}>3 · Código do Evento Ponto</label>
+              <input value={folhaEvento} onChange={e => setFolhaEvento(e.target.value.replace(/\D/g,'').slice(0,4))} placeholder="1105" style={{ ...S.inp, borderColor:'rgba(251,191,36,0.3)' }}/>
+            </div>
+          </div>
+
+          {folhaMsg && <div style={{ padding:'10px 14px', background: folhaMsg.startsWith('✓') ? 'rgba(34,197,94,0.08)' : 'rgba(239,68,68,0.08)', border:`1px solid ${folhaMsg.startsWith('✓') ? 'rgba(34,197,94,0.2)' : 'rgba(239,68,68,0.2)'}`, borderRadius:6, marginBottom:16, fontSize:12, color: folhaMsg.startsWith('✓') ? '#4ade80' : '#f87171' }}>{folhaMsg}</div>}
+
+          {/* Tabela de funcionários */}
+          {folhaEmps.length > 0 && <>
+            <label style={{ ...S.lb, marginBottom:10 }}>4 · Códigos dos Funcionários — <span style={{color:'#fbbf24'}}>{folhaEmps.filter(e=>e.codigo).length}/{folhaEmps.length} cadastrados</span></label>
+            <div style={{ maxHeight:320, overflowY:'auto', border:'1px solid rgba(255,255,255,0.06)', borderRadius:10, marginBottom:16 }}>
+              <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
+                <thead>
+                  <tr style={{ background:'rgba(255,255,255,0.04)', position:'sticky', top:0 }}>
+                    {['#','Nome','CPF','Bruto (R$)','Código (6 dígitos)'].map(h => (
+                      <th key={h} style={{ padding:'8px 12px', textAlign:'left', color:'#6b7a90', fontWeight:600, fontSize:11 }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {folhaEmps.map((emp, idx) => (
+                    <tr key={emp.cpf} style={{ borderTop:'1px solid rgba(255,255,255,0.04)', background: idx%2===0?'transparent':'rgba(255,255,255,0.015)' }}>
+                      <td style={{ padding:'7px 12px', color:'#4a5a70' }}>{idx+1}</td>
+                      <td style={{ padding:'7px 12px', color:'#e8edf5', maxWidth:200, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{emp.nome}</td>
+                      <td style={{ padding:'7px 12px', color:'#6b7a90', fontFamily:'monospace', fontSize:11 }}>{emp.cpf}</td>
+                      <td style={{ padding:'7px 12px', color:'#4ade80', textAlign:'right' }}>R$ {emp.bruto.toLocaleString('pt-BR',{minimumFractionDigits:2})}</td>
+                      <td style={{ padding:'6px 12px' }}>
+                        <input
+                          value={emp.codigo}
+                          maxLength={6}
+                          placeholder="000000"
+                          onChange={e => {
+                            const val = e.target.value.toUpperCase().slice(0,6);
+                            const updated = folhaEmps.map((x,i) => i===idx ? {...x, codigo:val} : x);
+                            setFolhaEmps(updated);
+                          }}
+                          onBlur={() => {
+                            // Auto-save on blur
+                            const map = loadCodigosSalvos();
+                            folhaEmps.forEach(e => { if(e.codigo) map[e.cpf] = e.codigo; });
+                            saveCodigosSalvos(map); setFolhaCods(map);
+                          }}
+                          style={{ width:80, padding:'4px 8px', background:'rgba(251,191,36,0.08)', border:`1px solid ${emp.codigo ? 'rgba(251,191,36,0.4)' : 'rgba(255,255,255,0.1)'}`, borderRadius:6, color: emp.codigo ? '#fbbf24' : '#6b7a90', fontFamily:'monospace', fontSize:12, outline:'none', textAlign:'center' }}
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Totais */}
+            <div style={{ display:'flex', gap:16, marginBottom:20 }}>
+              {[
+                { label:'Funcionários', val: folhaEmps.length, color:'#e8edf5' },
+                { label:'Com código', val: folhaEmps.filter(e=>e.codigo).length, color:'#4ade80' },
+                { label:'Sem código', val: folhaEmps.filter(e=>!e.codigo).length, color: folhaEmps.filter(e=>!e.codigo).length > 0 ? '#f87171' : '#4ade80' },
+                { label:'Total Bruto', val: 'R$ ' + folhaEmps.reduce((s,e)=>s+e.bruto,0).toLocaleString('pt-BR',{minimumFractionDigits:2}), color:'#4ade80' },
+              ].map(t => (
+                <div key={t.label} style={{ flex:1, padding:'12px 14px', background:'rgba(255,255,255,0.03)', borderRadius:8, border:'1px solid rgba(255,255,255,0.06)' }}>
+                  <div style={{ fontSize:10, color:'#6b7a90', marginBottom:4, textTransform:'uppercase', letterSpacing:'0.05em' }}>{t.label}</div>
+                  <div style={{ fontSize:16, fontWeight:700, color:t.color }}>{t.val}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Botões de geração */}
+            <div style={{ display:'flex', gap:12 }}>
+              <button
+                disabled={folhaEmps.filter(e=>e.codigo).length === 0 || !folhaComp}
+                onClick={() => {
+                  const validos = folhaEmps.filter(e => e.codigo);
+                  const n = exportFolhaValores(validos, folhaComp);
+                  setFolhaMsg(`✓ IMPORTACAO_VALORES_${folhaComp.replace('/','_')}.txt gerado com ${n} registros.`);
+                }}
+                style={{ flex:1, padding:'13px 20px', fontSize:13, fontWeight:700, background: folhaEmps.filter(e=>e.codigo).length > 0 && folhaComp ? 'rgba(251,191,36,0.15)' : 'rgba(255,255,255,0.04)', color: folhaEmps.filter(e=>e.codigo).length > 0 && folhaComp ? '#fbbf24' : '#4a5a70', border:`1px solid ${folhaEmps.filter(e=>e.codigo).length > 0 && folhaComp ? 'rgba(251,191,36,0.4)' : 'rgba(255,255,255,0.06)'}`, borderRadius:10, cursor: folhaEmps.filter(e=>e.codigo).length > 0 && folhaComp ? 'pointer' : 'not-allowed', transition:'all 0.2s' }}
+                title="Gera IMPORTACAO_VALORES.txt — Layout 26 bytes (Convênio Sage Folhamatic)"
+              >⭳ IMPORTACAO_VALORES.txt<div style={{fontSize:10,fontWeight:400,marginTop:2,opacity:0.7}}>26 bytes/reg · Convênio</div></button>
+
+              <button
+                disabled={folhaEmps.filter(e=>e.codigo).length === 0 || !folhaComp || !folhaEvento}
+                onClick={() => {
+                  const validos = folhaEmps.filter(e => e.codigo);
+                  const n = exportFolhaPonto(validos, folhaEvento, folhaComp);
+                  setFolhaMsg(`✓ IMPORTACAO_PONTO_${folhaComp.replace('/','_')}.txt gerado com ${n} registros. Evento: ${folhaEvento}`);
+                }}
+                style={{ flex:1, padding:'13px 20px', fontSize:13, fontWeight:700, background: folhaEmps.filter(e=>e.codigo).length > 0 && folhaComp && folhaEvento ? 'rgba(42,127,255,0.15)' : 'rgba(255,255,255,0.04)', color: folhaEmps.filter(e=>e.codigo).length > 0 && folhaComp && folhaEvento ? '#60a5fa' : '#4a5a70', border:`1px solid ${folhaEmps.filter(e=>e.codigo).length > 0 && folhaComp && folhaEvento ? 'rgba(42,127,255,0.4)' : 'rgba(255,255,255,0.06)'}`, borderRadius:10, cursor: folhaEmps.filter(e=>e.codigo).length > 0 && folhaComp && folhaEvento ? 'pointer' : 'not-allowed', transition:'all 0.2s' }}
+                title="Gera IMPORTACAO_PONTO.txt — Layout 40 bytes (Ponto Padrão Windows 3)"
+              >⭳ IMPORTACAO_PONTO.txt<div style={{fontSize:10,fontWeight:400,marginTop:2,opacity:0.7}}>40 bytes/reg · Evento {folhaEvento||'----'}</div></button>
+            </div>
+          </>}
+        </div>}
+
       </div>
     </div>
     </div>

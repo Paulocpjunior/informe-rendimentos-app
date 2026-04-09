@@ -760,3 +760,85 @@ export function exportToCSV(fp, beneficiarios, tipoRendimento) {
   document.body.removeChild(a);
   setTimeout(() => URL.revokeObjectURL(url), 500);
 }
+
+// ══════════════════════════════════════════════════════════════════════════════
+// MÓDULO FOLHA IOB — Importação Sage Folhamatic
+// ══════════════════════════════════════════════════════════════════════════════
+
+// ─── PARSE XLSX DA IGREJA ────────────────────────────────────────────────────
+export async function parseIgrejaFolha(file) {
+  await loadScript(
+    'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js',
+    () => !!window.XLSX
+  );
+  const XLSX = window.XLSX;
+  const buf = await file.arrayBuffer();
+  const wb = XLSX.read(buf, { type: 'array', cellDates: true });
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+
+  const employees = [];
+  for (let i = 1; i < rows.length; i++) {
+    const row = rows[i];
+    const nome = String(row[2] || '').trim();
+    const cpf  = String(row[3] || '').trim();
+    if (!nome || !cpf || cpf === 'nan' || nome === 'nan') continue;
+    if (cpf.replace(/\D/g, '').length < 6) continue;
+    const bruto   = parseFloat(String(row[5]).replace(',', '.')) || 0;
+    const irrf    = parseFloat(String(row[6]).replace(',', '.')) || 0;
+    const liquido = parseFloat(String(row[7]).replace(',', '.')) || 0;
+    if (bruto === 0 && liquido === 0) continue;
+    employees.push({ nome, cpf, bruto, irrf, liquido });
+  }
+  return employees;
+}
+
+function _downloadTxt(conteudo, filename) {
+  const blob = new Blob([conteudo], { type: 'text/plain;charset=windows-1252;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 500);
+}
+
+// ─── EXPORTAR: IMPORTAÇÃO DE VALORES (26 bytes/reg) ─────────────────────────
+export function exportFolhaValores(employees, competencia) {
+  const lines = employees.map(e => {
+    const cod   = (e.codigo || '').padEnd(6, ' ').slice(0, 6);
+    const cents = Math.round(e.bruto * 100);
+    const conv  = cents.toString().padStart(12, '0').slice(0, 12);
+    const ref   = '00000000';
+    return cod + conv + ref;
+  });
+  const comp = (competencia || '').replace('/', '_');
+  _downloadTxt(lines.join('\r\n') + '\r\n', `IMPORTACAO_VALORES_${comp}.txt`);
+  return lines.length;
+}
+
+// ─── EXPORTAR: IMPORTAÇÃO PONTO PAD WINDOWS 3 (40 bytes/reg) ────────────────
+export function exportFolhaPonto(employees, codEvento, competencia) {
+  const evento = (codEvento || '0000').padStart(4, '0').slice(0, 4);
+  const lines = employees.map(e => {
+    const cod   = (e.codigo || '').padStart(6, '0').slice(0, 6);
+    const ref   = '00000000000000';
+    const esp   = '  ';
+    const cents = Math.round(e.bruto * 100);
+    const valor = cents.toString().padStart(14, '0').slice(0, 14);
+    return cod + evento + ref + esp + valor;
+  });
+  const comp = (competencia || '').replace('/', '_');
+  _downloadTxt(lines.join('\r\n') + '\r\n', `IMPORTACAO_PONTO_${comp}.txt`);
+  return lines.length;
+}
+
+// ─── PERSISTÊNCIA DE CÓDIGOS (localStorage) ──────────────────────────────────
+const LS_KEY = 'folhamatic_codigos_v1';
+export function loadCodigosSalvos() {
+  try { return JSON.parse(localStorage.getItem(LS_KEY) || '{}'); }
+  catch { return {}; }
+}
+export function saveCodigosSalvos(map) {
+  localStorage.setItem(LS_KEY, JSON.stringify(map));
+}
