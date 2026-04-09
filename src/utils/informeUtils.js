@@ -765,7 +765,7 @@ export function exportToCSV(fp, beneficiarios, tipoRendimento) {
 // MÓDULO FOLHA IOB — Importação Sage Folhamatic
 // ══════════════════════════════════════════════════════════════════════════════
 
-// ─── PARSE XLSX DA IGREJA ────────────────────────────────────────────────────
+// ─── PARSE XLSX DA IGREJA — detecção automática de colunas ──────────────────
 export async function parseIgrejaFolha(file) {
   await loadScript(
     'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js',
@@ -777,17 +777,46 @@ export async function parseIgrejaFolha(file) {
   const ws = wb.Sheets[wb.SheetNames[0]];
   const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
 
+  // Detecta automaticamente cabeçalho e colunas
+  const norm = v => String(v).toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+
+  let headerIdx = -1;
+  let idxNome = -1, idxCpf = -1, idxBruto = -1, idxIrrf = -1, idxLiq = -1;
+
+  for (let i = 0; i < Math.min(rows.length, 10); i++) {
+    const normed = rows[i].map(norm);
+    const nomeCol  = normed.findIndex(v => v.includes('nome') && !v.includes('dependente'));
+    const cpfCol   = normed.findIndex(v => v === 'cpf' || v.includes('cpf'));
+    const brutoCol = normed.findIndex(v => v === 'bruto' || v.includes('bruto'));
+    if (nomeCol >= 0 && cpfCol >= 0 && brutoCol >= 0) {
+      headerIdx = i;
+      idxNome  = nomeCol;
+      idxCpf   = cpfCol;
+      idxBruto = brutoCol;
+      idxIrrf  = normed.findIndex(v => v === 'irrf' || v.includes('irrf'));
+      idxLiq   = normed.findIndex(v => v.includes('liquid'));
+      break;
+    }
+  }
+
+  // Fallback: posições fixas do layout padrão da igreja
+  if (headerIdx < 0) {
+    idxNome = 2; idxCpf = 3; idxBruto = 5; idxIrrf = 6; idxLiq = 7; headerIdx = 0;
+  }
+
+  const toNum = v => parseFloat(String(v || 0).replace(',', '.')) || 0;
   const employees = [];
-  for (let i = 1; i < rows.length; i++) {
-    const row = rows[i];
-    const nome = String(row[2] || '').trim();
-    const cpf  = String(row[3] || '').trim();
-    if (!nome || !cpf || cpf === 'nan' || nome === 'nan') continue;
+  for (let i = headerIdx + 1; i < rows.length; i++) {
+    const row  = rows[i];
+    const nome = String(row[idxNome] || '').trim();
+    const cpf  = String(row[idxCpf]  || '').trim();
+    if (!nome || !cpf || nome === 'nan' || cpf === 'nan') continue;
     if (cpf.replace(/\D/g, '').length < 6) continue;
-    const bruto   = parseFloat(String(row[5]).replace(',', '.')) || 0;
-    const irrf    = parseFloat(String(row[6]).replace(',', '.')) || 0;
-    const liquido = parseFloat(String(row[7]).replace(',', '.')) || 0;
-    if (bruto === 0 && liquido === 0) continue;
+    const bruto   = toNum(row[idxBruto]);
+    const irrf    = idxIrrf >= 0 ? toNum(row[idxIrrf]) : 0;
+    const liquido = idxLiq  >= 0 ? toNum(row[idxLiq])  : bruto;
+    if (bruto <= 0) continue;
     employees.push({ nome, cpf, bruto, irrf, liquido });
   }
   return employees;
