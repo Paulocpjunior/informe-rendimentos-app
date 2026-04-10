@@ -871,3 +871,43 @@ export function loadCodigosSalvos() {
 export function saveCodigosSalvos(map) {
   localStorage.setItem(LS_KEY, JSON.stringify(map));
 }
+
+// ─── IMPORTAR CÓDIGOS DO XLSX DE MAPEAMENTO ──────────────────────────────────
+// Lê o CODIGOS_FUNCIONARIOS.xlsx e retorna mapa { cpf: codigo }
+export async function importarCodigosDeXlsx(file) {
+  await loadScript(
+    'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js',
+    () => !!window.XLSX
+  );
+  const XLSX = window.XLSX;
+  const buf  = await file.arrayBuffer();
+  const wb   = XLSX.read(buf, { type: 'array' });
+  const ws   = wb.Sheets[wb.SheetNames[0]];
+  const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+
+  const norm = v => String(v).toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+
+  // Detecta linha de cabeçalho
+  let headerIdx = -1, idxCpf = -1, idxCod = -1;
+  for (let i = 0; i < Math.min(rows.length, 10); i++) {
+    const normed = rows[i].map(norm);
+    const cpfCol = normed.findIndex(v => v === 'cpf' || v.includes('cpf'));
+    const codCol = normed.findIndex(v => v.includes('codigo') || v.includes('cdg') || v.includes('cod'));
+    if (cpfCol >= 0 && codCol >= 0) {
+      headerIdx = i; idxCpf = cpfCol; idxCod = codCol; break;
+    }
+  }
+  if (headerIdx < 0) throw new Error('Cabeçalho não encontrado. Verifique se é o arquivo CODIGOS_FUNCIONARIOS.xlsx');
+
+  const map = {};
+  for (let i = headerIdx + 1; i < rows.length; i++) {
+    const row = rows[i];
+    const cpf = String(row[idxCpf] || '').trim();
+    const cod = String(row[idxCod] || '').trim();
+    if (cpf && cod && cpf !== 'nan' && cod !== 'nan' && cpf.replace(/\D/g,'').length >= 6) {
+      map[cpf] = cod;
+    }
+  }
+  return map;
+}

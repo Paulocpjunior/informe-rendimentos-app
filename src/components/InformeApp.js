@@ -5,7 +5,7 @@ import { db } from '../config/firebase';
 import {
   validarCNPJ, validarCPF, fmtMoeda, fmtCPF, fmtCNPJ, calcularIRRF,
   MESES, TIPOS_RENDIMENTO, CNPJ_DB, parseExcel, gerarPDF, downloadPDF, fetchCNPJ, gerarDARF, baixarModeloExcel, exportToCSV,
-  parseIgrejaFolha, exportFolhaValores, exportFolhaPonto, loadCodigosSalvos, saveCodigosSalvos
+  parseIgrejaFolha, exportFolhaValores, exportFolhaPonto, loadCodigosSalvos, saveCodigosSalvos, importarCodigosDeXlsx
 } from '../utils/informeUtils';
 
 export default function InformeApp() {
@@ -33,7 +33,8 @@ export default function InformeApp() {
   const [folhaBusy, setFolhaBusy]       = useState(false);
   const [folhaMsg, setFolhaMsg]         = useState('');
   const [folhaDrag, setFolhaDrag]       = useState(false);
-  const fRFolha = useRef(null);
+  const fRFolha    = useRef(null);
+  const fRCodigos  = useRef(null);
 
   // RESET DE SEGURANÇA NO MOUNT
   React.useEffect(() => {
@@ -570,11 +571,36 @@ export default function InformeApp() {
             </div>
           </div>
 
+          {/* Botão importar códigos */}
+          <div style={{ marginBottom:16 }}>
+            <label style={S.lb}>4 · Importar Códigos Salvos <span style={{color:'#fbbf24',fontSize:10}}>(opcional — carrega de outra máquina)</span></label>
+            <input ref={fRCodigos} type="file" accept=".xlsx,.xls" style={{ display:'none' }}
+              onChange={async e => {
+                const f = e.target.files[0]; if (!f) return;
+                try {
+                  const map = await importarCodigosDeXlsx(f);
+                  const total = Object.keys(map).length;
+                  if (total === 0) { setFolhaMsg('Nenhum código encontrado no arquivo.'); return; }
+                  saveCodigosSalvos(map); setFolhaCods(map);
+                  // Apply to current employees
+                  if (folhaEmps.length > 0) {
+                    setFolhaEmps(folhaEmps.map(emp => ({ ...emp, codigo: map[emp.cpf] || emp.codigo })));
+                  }
+                  setFolhaMsg('✓ ' + total + ' códigos importados e salvos neste navegador!');
+                } catch(err) { setFolhaMsg('Erro: ' + err.message); }
+                e.target.value = '';
+              }}
+            />
+            <button onClick={() => fRCodigos.current?.click()} style={{ display:'flex', alignItems:'center', gap:8, padding:'10px 18px', background:'rgba(251,191,36,0.08)', border:'1px solid rgba(251,191,36,0.25)', borderRadius:8, color:'#fbbf24', fontSize:12, fontWeight:600, cursor:'pointer', transition:'all 0.2s' }}>
+              📥 Importar CODIGOS_FUNCIONARIOS.xlsx
+            </button>
+          </div>
+
           {folhaMsg && <div style={{ padding:'10px 14px', background: folhaMsg.startsWith('✓') ? 'rgba(34,197,94,0.08)' : 'rgba(239,68,68,0.08)', border:`1px solid ${folhaMsg.startsWith('✓') ? 'rgba(34,197,94,0.2)' : 'rgba(239,68,68,0.2)'}`, borderRadius:6, marginBottom:16, fontSize:12, color: folhaMsg.startsWith('✓') ? '#4ade80' : '#f87171' }}>{folhaMsg}</div>}
 
           {/* Tabela de funcionários */}
           {folhaEmps.length > 0 && <>
-            <label style={{ ...S.lb, marginBottom:10 }}>4 · Códigos dos Funcionários — <span style={{color:'#fbbf24'}}>{folhaEmps.filter(e=>e.codigo).length}/{folhaEmps.length} cadastrados</span></label>
+            <label style={{ ...S.lb, marginBottom:10 }}>5 · Códigos dos Funcionários — <span style={{color:'#fbbf24'}}>{folhaEmps.filter(e=>e.codigo).length}/{folhaEmps.length} cadastrados</span></label>
             <div style={{ maxHeight:320, overflowY:'auto', border:'1px solid rgba(255,255,255,0.06)', borderRadius:10, marginBottom:16 }}>
               <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
                 <thead>
