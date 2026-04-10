@@ -1,5 +1,7 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useAuth } from '../config/AuthContext';
+import { ensureUserProfile, getCurrentUserProfile } from '../services/firestore';
+import AdminPanel from './AdminPanel';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import {
@@ -24,6 +26,15 @@ export default function InformeApp() {
   const [drag, setDrag] = useState(false);
   const [msg, setMsg] = useState('');
   const fR = useRef(null);
+
+  // ── PERFIL DO USUÁRIO ────────────────────────────────────────────────────────
+  const [userProfile, setUserProfile] = useState(null);
+
+  useEffect(() => {
+    if (user) {
+      ensureUserProfile(user).then(profile => setUserProfile(profile)).catch(console.error);
+    }
+  }, [user]);
 
   // ── ESTADO FOLHA IOB ────────────────────────────────────────────────────────
   const [folhaEmps, setFolhaEmps]       = useState([]);   // funcionários do xlsx
@@ -185,6 +196,7 @@ export default function InformeApp() {
   // Validação de navegação: impede pular passos para frente sem preenchimento
   const canNavigate = (target) => {
     if (target === 7) return true; // Folha IOB sempre acessível
+    if (target === 8) return userProfile?.role === 'admin'; // Admin apenas
     if (target < step) return true;
     if (target === 1) return true;
     if (target === 2) return fp.nome && fp.cnpj;
@@ -243,7 +255,7 @@ export default function InformeApp() {
           <div style={{ width:34, height:34, borderRadius:'50%', background:'linear-gradient(135deg,#1d4ed8,#2a7fff)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:12, fontWeight:700, color:'#fff', flexShrink:0 }}>{user.email?.slice(0,2).toUpperCase()}</div>
           <div style={{ overflow:'hidden' }}>
             <div style={{ fontSize:12.5, fontWeight:600, color:'#e8edf5', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', maxWidth:120 }}>{user.email?.split('@')[0]}</div>
-            <div style={{ fontSize:10.5, color:'#4a5a70' }}>Operador</div>
+            <div style={{ fontSize:10.5, color: userProfile?.role==='admin' ? '#fbbf24' : '#4a5a70' }}>{userProfile?.role==='admin' ? 'Administrador' : 'Operador'}</div>
           </div>
         </div>
         <nav style={{ flex:1, padding:'6px 10px', display:'flex', flexDirection:'column', gap:2 }}>
@@ -260,6 +272,14 @@ export default function InformeApp() {
             <span>Folha IOB</span>
             {step===7 && <span style={{ marginLeft:'auto', width:6, height:6, borderRadius:'50%', background:'#fbbf24', flexShrink:0 }}/>}
           </button>
+          {userProfile?.role === 'admin' && <>
+            <div style={{ margin:'8px 4px', borderTop:'1px solid rgba(255,255,255,0.06)'}}/>
+            <button onClick={() => setStep(8)} style={{ display:'flex', alignItems:'center', gap:10, padding:'9px 12px', borderRadius:10, border:`1px solid ${step===8 ? 'rgba(251,191,36,0.4)' : 'transparent'}`, fontSize:12.5, fontWeight:600, cursor:'pointer', transition:'all 0.15s', textAlign:'left', width:'100%', background: step===8 ? 'rgba(251,191,36,0.12)' : 'transparent', color: step===8 ? '#fbbf24' : '#6b7a90' }}>
+              <span style={{ fontSize:14, flexShrink:0 }}>⚙️</span>
+              <span>Admin</span>
+              {step===8 && <span style={{ marginLeft:'auto', width:6, height:6, borderRadius:'50%', background:'#fbbf24', flexShrink:0 }}/>}
+            </button>
+          </>}
         </nav>
         <div style={{ padding:'12px 10px 20px', borderTop:'1px solid rgba(255,255,255,0.06)' }}>
           <div style={{ display:'flex', alignItems:'center', gap:8, padding:'6px 12px', fontSize:11.5, color:'#2ac864', marginBottom:6 }}>
@@ -694,6 +714,11 @@ export default function InformeApp() {
           </>}
         </div>}
 
+        {step === 8 && userProfile?.role === 'admin' && (
+          <div style={S.card}>
+            <AdminPanel currentUser={userProfile} />
+          </div>
+        )}
       </div>
     </div>
     </div>
