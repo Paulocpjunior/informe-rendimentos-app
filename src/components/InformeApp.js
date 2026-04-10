@@ -5,7 +5,7 @@ import { db } from '../config/firebase';
 import {
   validarCNPJ, validarCPF, fmtMoeda, fmtCPF, fmtCNPJ, calcularIRRF,
   MESES, TIPOS_RENDIMENTO, CNPJ_DB, parseExcel, gerarPDF, downloadPDF, fetchCNPJ, gerarDARF, baixarModeloExcel, exportToCSV,
-  parseIgrejaFolha, exportFolhaValores, exportFolhaPonto, loadCodigosSalvos, saveCodigosSalvos, importarCodigosDeXlsx
+  parseIgrejaFolha, exportFolhaValores, exportFolhaPonto, loadCodigosSalvos, saveCodigosSalvos, importarCodigosDeXlsx, downloadLayoutExcel
 } from '../utils/informeUtils';
 
 export default function InformeApp() {
@@ -517,21 +517,29 @@ export default function InformeApp() {
           </div>
 
           {/* Upload xlsx */}
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12 }}>
+            <div style={{ fontSize:11, color:'#6b7a90' }}>Aceita: planilha da igreja <strong style={{color:'#fbbf24'}}>OU</strong> o arquivo CODIGOS_FUNCIONARIOS.xlsx — ambos funcionam</div>
+            <button onClick={() => downloadLayoutExcel()} style={{ display:'flex', alignItems:'center', gap:6, padding:'7px 14px', background:'rgba(99,102,241,0.1)', border:'1px solid rgba(99,102,241,0.3)', borderRadius:8, color:'#818cf8', fontSize:11, fontWeight:600, cursor:'pointer', whiteSpace:'nowrap' }}>
+              📋 Baixar Layout Excel
+            </button>
+          </div>
           <div style={{ marginBottom: 20 }}>
-            <label style={S.lb}>1 · Planilha da Igreja (.xlsx)</label>
+            <label style={S.lb}>1 · Planilha (.xlsx) — Igreja ou Códigos</label>
             <input ref={fRFolha} type="file" accept=".xlsx,.xls" style={{ display:'none' }}
               onChange={async e => {
                 const f = e.target.files[0]; if (!f) return;
                 setFolhaBusy(true); setFolhaMsg('');
                 try {
-                  const emps = await parseIgrejaFolha(f);
-                  const saved = loadCodigosSalvos();
-                  const merged = emps.map(emp => ({ ...emp, codigo: saved[emp.cpf] || '' }));
+                  const { employees, codigosMap } = await parseIgrejaFolha(f);
+                  // Merge: prioridade códigos no próprio arquivo > localStorage
+                  const saved = { ...loadCodigosSalvos(), ...codigosMap };
+                  if (Object.keys(codigosMap).length > 0) saveCodigosSalvos(saved);
+                  const merged = employees.map(emp => ({ ...emp, codigo: saved[emp.cpf] || '' }));
                   setFolhaEmps(merged);
-                  // Auto-detect competência from filename or first row
                   const m = f.name.match(/(\d{2})[_\-\/](\d{4})/);
                   if (m) setFolhaComp(`${m[1]}/${m[2]}`);
-                  setFolhaMsg(`✓ ${merged.length} funcionários carregados. ${merged.filter(e=>!e.codigo).length} sem código cadastrado.`);
+                  const comCod = merged.filter(e=>e.codigo).length;
+                  setFolhaMsg(`✓ ${merged.length} funcionários carregados. ${comCod} com código${comCod < merged.length ? ` — ${merged.length-comCod} sem código` : ' ✓'}.`);
                 } catch(err) { setFolhaMsg('Erro ao ler planilha: ' + err.message); }
                 setFolhaBusy(false);
               }}
@@ -545,11 +553,13 @@ export default function InformeApp() {
                 const f = e.dataTransfer.files[0]; if (!f) return;
                 setFolhaBusy(true); setFolhaMsg('');
                 try {
-                  const emps = await parseIgrejaFolha(f);
-                  const saved = loadCodigosSalvos();
-                  const merged = emps.map(emp => ({ ...emp, codigo: saved[emp.cpf] || '' }));
+                  const { employees, codigosMap } = await parseIgrejaFolha(f);
+                  const saved = { ...loadCodigosSalvos(), ...codigosMap };
+                  if (Object.keys(codigosMap).length > 0) saveCodigosSalvos(saved);
+                  const merged = employees.map(emp => ({ ...emp, codigo: saved[emp.cpf] || '' }));
                   setFolhaEmps(merged);
-                  setFolhaMsg(`✓ ${merged.length} funcionários carregados.`);
+                  const comCod = merged.filter(e=>e.codigo).length;
+                  setFolhaMsg(`✓ ${merged.length} funcionários carregados. ${comCod} com código.`);
                 } catch(err) { setFolhaMsg('Erro: ' + err.message); }
                 setFolhaBusy(false);
               }}

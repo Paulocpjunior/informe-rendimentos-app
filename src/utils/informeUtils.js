@@ -765,24 +765,25 @@ export function exportToCSV(fp, beneficiarios, tipoRendimento) {
 // MÓDULO FOLHA IOB — Importação Sage Folhamatic
 // ══════════════════════════════════════════════════════════════════════════════
 
-// ─── PARSE XLSX DA IGREJA — detecção automática de colunas ──────────────────
+// ─── PARSE XLSX UNIVERSAL — detecta layout Igreja OU CODIGOS_FUNCIONARIOS ────
+// Retorna { employees: [{nome,cpf,bruto,irrf,liquido,codigo}], codigosMap: {cpf:codigo} }
 export async function parseIgrejaFolha(file) {
   await loadScript(
     'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js',
     () => !!window.XLSX
   );
   const XLSX = window.XLSX;
-  const buf = await file.arrayBuffer();
-  const wb = XLSX.read(buf, { type: 'array', cellDates: true });
-  const ws = wb.Sheets[wb.SheetNames[0]];
+  const buf  = await file.arrayBuffer();
+  const wb   = XLSX.read(buf, { type: 'array', cellDates: true });
+  const ws   = wb.Sheets[wb.SheetNames[0]];
   const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
 
-  // Detecta automaticamente cabeçalho e colunas
   const norm = v => String(v).toLowerCase()
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
 
+  // Detecta cabeçalho e colunas
   let headerIdx = -1;
-  let idxNome = -1, idxCpf = -1, idxBruto = -1, idxIrrf = -1, idxLiq = -1;
+  let idxNome=-1, idxCpf=-1, idxBruto=-1, idxIrrf=-1, idxLiq=-1, idxCod=-1;
 
   for (let i = 0; i < Math.min(rows.length, 10); i++) {
     const normed = rows[i].map(norm);
@@ -796,30 +797,39 @@ export async function parseIgrejaFolha(file) {
       idxBruto = brutoCol;
       idxIrrf  = normed.findIndex(v => v === 'irrf' || v.includes('irrf'));
       idxLiq   = normed.findIndex(v => v.includes('liquid'));
+      // Detecta coluna de código (CODIGOS_FUNCIONARIOS.xlsx)
+      idxCod   = normed.findIndex(v =>
+        v.includes('codigo') || v.includes('cdg') || v === 'cod' ||
+        (v.includes('cod') && !v.includes('cpf') && !v.includes('evento'))
+      );
       break;
     }
   }
 
-  // Fallback: posições fixas do layout padrão da igreja
+  // Fallback posições fixas layout padrão
   if (headerIdx < 0) {
-    idxNome = 2; idxCpf = 3; idxBruto = 5; idxIrrf = 6; idxLiq = 7; headerIdx = 0;
+    idxNome=2; idxCpf=3; idxBruto=5; idxIrrf=6; idxLiq=7; headerIdx=0;
   }
 
-  const toNum = v => parseFloat(String(v || 0).replace(',', '.')) || 0;
-  const employees = [];
+  const toNum = v => parseFloat(String(v||0).replace(',','.')) || 0;
+  const employees  = [];
+  const codigosMap = {};
+
   for (let i = headerIdx + 1; i < rows.length; i++) {
     const row  = rows[i];
     const nome = String(row[idxNome] || '').trim();
     const cpf  = String(row[idxCpf]  || '').trim();
-    if (!nome || !cpf || nome === 'nan' || cpf === 'nan') continue;
-    if (cpf.replace(/\D/g, '').length < 6) continue;
+    if (!nome || !cpf || nome==='nan' || cpf==='nan') continue;
+    if (cpf.replace(/\D/g,'').length < 6) continue;
     const bruto   = toNum(row[idxBruto]);
     const irrf    = idxIrrf >= 0 ? toNum(row[idxIrrf]) : 0;
     const liquido = idxLiq  >= 0 ? toNum(row[idxLiq])  : bruto;
     if (bruto <= 0) continue;
-    employees.push({ nome, cpf, bruto, irrf, liquido });
+    const codigo  = idxCod  >= 0 ? String(row[idxCod]||'').trim() : '';
+    if (codigo) codigosMap[cpf] = codigo;
+    employees.push({ nome, cpf, bruto, irrf, liquido, codigo });
   }
-  return employees;
+  return { employees, codigosMap };
 }
 
 function _downloadTxt(conteudo, filename) {
@@ -870,6 +880,73 @@ export function loadCodigosSalvos() {
 }
 export function saveCodigosSalvos(map) {
   localStorage.setItem(LS_KEY, JSON.stringify(map));
+}
+
+// ─── DOWNLOAD EXCEL MODELO DE LAYOUT ─────────────────────────────────────────
+export async function downloadLayoutExcel() {
+  await loadScript(
+    'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js',
+    () => !!window.XLSX
+  );
+  const XLSX = window.XLSX;
+  const wb = XLSX.utils.book_new();
+
+  // ── Aba 1: Layout Importação de Valores (26 bytes) ──
+  const ws1 = XLSX.utils.aoa_to_sheet([
+    ['LAYOUT — IMPORTAÇÃO DE VALORES (26 bytes/registro)', '', '', '', ''],
+    ['Sistema: Sage IOB Folhamatic', '', '', '', ''],
+    ['', '', '', '', ''],
+    ['Pos. Inicial', 'Pos. Final', 'Tipo', 'Tam.', 'Descrição'],
+    [1, 6, 'Alfanumérico', 6, 'Código do Funcionário'],
+    [7, 18, 'Alfanumérico', 12, 'Valor do Convênio (valor × 100, zero-pad esquerda)'],
+    [19, 26, 'Alfanumérico', 8, 'Valor da Referência (zeros)'],
+    ['', '', '', '', ''],
+    ['EXEMPLO', '', '', '', ''],
+    ['Código', 'Valor Bruto', 'Linha gerada (26 chars)', '', ''],
+    ['000051', 'R$ 2.300,00', '000051000000230000000000', '', ''],
+    ['000055', 'R$ 6.710,00', '000055000000671000000000', '', ''],
+    ['000044', 'R$ 1.000,00', '000044000000100000000000', '', ''],
+  ]);
+  ws1['!cols'] = [{wch:15},{wch:20},{wch:10},{wch:8},{wch:50}];
+  ws1['!merges'] = [{s:{r:0,c:0},e:{r:0,c:4}},{s:{r:1,c:0},e:{r:1,c:4}}];
+  XLSX.utils.book_append_sheet(wb, ws1, 'Importação Valores');
+
+  // ── Aba 2: Layout Ponto (40 bytes) ──
+  const ws2 = XLSX.utils.aoa_to_sheet([
+    ['LAYOUT — IMPORTAÇÃO PONTO PADRÃO WINDOWS 3 (40 bytes/registro)', '', '', '', ''],
+    ['Sistema: Sage IOB Folhamatic', '', '', '', ''],
+    ['', '', '', '', ''],
+    ['Pos. Inicial', 'Pos. Final', 'Tipo', 'Tam.', 'Descrição'],
+    [1,  6,  'Numérico',     6,  'Código do Funcionário'],
+    [7,  10, 'Numérico',     4,  'Código do Evento (ex: 1105)'],
+    [11, 24, 'Numérico',     14, 'Referência (zeros — 6 casas decimais implícitas)'],
+    [25, 26, 'Alfanumérico', 2,  'Espaços em branco'],
+    [27, 40, 'Numérico',     14, 'Valor (valor × 100, zero-pad — 2 casas decimais implícitas)'],
+    ['', '', '', '', ''],
+    ['EXEMPLO — Evento 1105', '', '', '', ''],
+    ['Código', 'Valor Bruto', 'Linha gerada (40 chars)', '', ''],
+    ['000051', 'R$ 2.300,00', '00005111050000000000000000  00000000230000', '', ''],
+    ['000055', 'R$ 6.710,00', '00005511050000000000000000  00000000671000', '', ''],
+    ['', '', '', '', ''],
+    ['OBS: As últimas 2 posições do campo Valor = casas decimais', '', '', '', ''],
+    ['Ex: R$ 50,54 → 00000000005054', '', '', '', ''],
+  ]);
+  ws2['!cols'] = [{wch:15},{wch:20},{wch:10},{wch:8},{wch:50}];
+  ws2['!merges'] = [{s:{r:0,c:0},e:{r:0,c:4}},{s:{r:1,c:0},e:{r:1,c:4}}];
+  XLSX.utils.book_append_sheet(wb, ws2, 'Importação Ponto');
+
+  // ── Aba 3: Modelo planilha funcionários ──
+  const ws3 = XLSX.utils.aoa_to_sheet([
+    ['MODELO — Planilha de Funcionários (enviar mensalmente)', '', '', '', '', '', ''],
+    ['Localidade', 'CNPJ', 'Nome (Proprietário)', 'CPF', 'Apuração', 'Bruto', 'IRRF', 'Líquido'],
+    ['Jandira', '03.954.491/0001-06', 'João da Silva', '000.000.000-00', '2026-03-01', 2300.00, 0, 2300.00],
+    ['Santos',  '03.954.491/0001-06', 'Maria Souza',   '111.111.111-11', '2026-03-01', 6710.00, 684.32, 6025.68],
+  ]);
+  ws3['!cols'] = [{wch:20},{wch:22},{wch:35},{wch:18},{wch:15},{wch:12},{wch:12},{wch:12}];
+  ws3['!merges'] = [{s:{r:0,c:0},e:{r:0,c:7}}];
+  XLSX.utils.book_append_sheet(wb, ws3, 'Modelo Planilha');
+
+  XLSX.writeFile(wb, 'Layout_Importacao_SageIOB_Folhamatic.xlsx');
 }
 
 // ─── IMPORTAR CÓDIGOS DO XLSX DE MAPEAMENTO ──────────────────────────────────
