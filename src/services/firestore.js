@@ -23,7 +23,9 @@ export const auth = getAuth(app);
 const API_URL = process.env.REACT_APP_API_URL || '';
 
 async function authHeader() {
-  const token = await auth.currentUser?.getIdToken();
+  // Force token refresh to ensure it's valid
+  const token = await auth.currentUser?.getIdToken(true);
+  if (!token) throw new Error('Usuário não autenticado');
   return { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
 }
 
@@ -119,11 +121,14 @@ export async function ensureUserProfile(user) {
   const ref  = doc(db, 'users', user.uid);
   const snap = await getDoc(ref);
   if (!snap.exists()) {
-    const isFirstUser = (await getDocs(collection(db, 'users'))).empty;
+    // Check if this is the first user OR if it's the admin email
+    const usersSnap = await getDocs(collection(db, 'users'));
+    const isFirstUser = usersSnap.empty;
+    const isAdminEmail = user.email === 'junior@spassessoriacontabil.com.br';
     await setDoc(ref, {
       email: user.email,
       nome:  user.displayName || user.email.split('@')[0],
-      role:  isFirstUser ? 'admin' : 'operator',
+      role:  (isFirstUser || isAdminEmail) ? 'admin' : 'operator',
       createdAt: new Date().toISOString(),
       lastLogin: new Date().toISOString(),
       active: true,

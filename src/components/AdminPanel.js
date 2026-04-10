@@ -37,15 +37,20 @@ export default function AdminPanel({ currentUser }) {
 
   async function fetchUsers() {
     setBusy(true);
-    try { setUsers(await getUsers()); }
-    catch(e) { setMsg('Erro ao carregar usuários: ' + e.message); }
+    try {
+      const result = await getUsers();
+      setUsers(Array.isArray(result) ? result : []);
+      if (!Array.isArray(result) && result?.error) setMsg('Erro: ' + result.error);
+    } catch(e) { setMsg('Erro ao carregar usuários: ' + e.message); }
     setBusy(false);
   }
 
   async function fetchLogs() {
     setBusy(true);
-    try { setLogs(await getLogs()); }
-    catch(e) { setMsg('Erro ao carregar logs'); }
+    try {
+      const result = await getLogs();
+      setLogs(Array.isArray(result) ? result : []);
+    } catch(e) { setMsg('Erro ao carregar logs'); }
     setBusy(false);
   }
 
