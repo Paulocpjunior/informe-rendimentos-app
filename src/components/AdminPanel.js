@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
-  getUsers, createUser, updateUser, deleteUser,
-  sendInvite, getLogs, loadCodigosFirestore
+  getUsers, createUserViaAPI, deleteUserViaAPI, getLogs
 } from '../services/firestore';
 
 const S = {
@@ -57,7 +56,7 @@ export default function AdminPanel({ currentUser }) {
   async function handleCreateUser(e) {
     e.preventDefault(); setBusy(true); setMsg('');
     try {
-      await createUser(form);
+      await createUserViaAPI(form);
       setMsg('✓ Colaborador criado com sucesso!');
       setShowForm(false);
       setForm({ nome:'', email:'', password:'', role:'operator' });
@@ -70,7 +69,9 @@ export default function AdminPanel({ currentUser }) {
     const newRole = user.role === 'admin' ? 'operator' : 'admin';
     if (!window.confirm(`Alterar ${user.nome} para ${newRole}?`)) return;
     try {
-      await updateUser(user.uid, { role: newRole });
+      const { doc: firestoreDoc, updateDoc: firestoreUpdate } = await import('firebase/firestore');
+      const { db: firestoreDb } = await import('../services/firestore');
+      await firestoreUpdate(firestoreDoc(firestoreDb, 'users', user.uid), { role: newRole });
       setMsg(`✓ Role de ${user.nome} atualizado`);
       await fetchUsers();
     } catch(e) { setMsg('Erro: ' + e.message); }
@@ -79,7 +80,12 @@ export default function AdminPanel({ currentUser }) {
   async function handleDelete(user) {
     if (!window.confirm(`Remover ${user.nome} (${user.email})? Esta ação não pode ser desfeita.`)) return;
     try {
-      await deleteUser(user.uid);
+      // Remove from Firestore immediately
+      const { doc: firestoreDoc, deleteDoc: firestoreDelete } = await import('firebase/firestore');
+      const { db: firestoreDb } = await import('../services/firestore');
+      await firestoreDelete(firestoreDoc(firestoreDb, 'users', user.uid));
+      // Try to remove from Auth via API (best effort)
+      deleteUserViaAPI(user.uid).catch(()=>{});
       setMsg(`✓ ${user.nome} removido`);
       await fetchUsers();
     } catch(e) { setMsg('Erro: ' + e.message); }

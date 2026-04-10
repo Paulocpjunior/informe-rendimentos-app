@@ -70,10 +70,29 @@ export async function getLogs(onlyMine = false) {
   return res.json();
 }
 
-// ─── GESTÃO DE USUÁRIOS (via Cloud Run — Admin SDK) ──────────────────────────
+// ─── GESTÃO DE USUÁRIOS ──────────────────────────────────────────────────────
+// Lê direto do Firestore (não precisa do Cloud Run)
 export async function getUsers() {
+  const snap = await getDocs(collection(db, 'users'));
+  return snap.docs.map(d => ({ uid: d.id, ...d.data() }))
+    .sort((a,b) => (a.createdAt||'').localeCompare(b.createdAt||''));
+}
+
+// Cria usuário via Cloud Run (precisa do Admin SDK)
+export async function createUserViaAPI(data) {
   const headers = await authHeader();
-  const res = await fetch(`${API_URL}/api/users`, { headers });
+  const res = await fetch(`${API_URL}/api/users`, {
+    method: 'POST', headers, body: JSON.stringify(data),
+  });
+  return res.json();
+}
+
+// Deleta usuário via Cloud Run (precisa do Admin SDK)
+export async function deleteUserViaAPI(uid) {
+  const headers = await authHeader();
+  const res = await fetch(`${API_URL}/api/users/${uid}`, {
+    method: 'DELETE', headers,
+  });
   return res.json();
 }
 
