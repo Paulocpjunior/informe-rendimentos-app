@@ -937,13 +937,16 @@ export async function downloadLayoutExcel() {
 
   // ── Aba 3: Modelo planilha funcionários ──
   const ws3 = XLSX.utils.aoa_to_sheet([
-    ['MODELO — Planilha de Funcionários (enviar mensalmente)', '', '', '', '', '', ''],
-    ['Localidade', 'CNPJ', 'Nome (Proprietário)', 'CPF', 'Apuração', 'Bruto', 'IRRF', 'Líquido'],
-    ['Jandira', '03.954.491/0001-06', 'João da Silva', '000.000.000-00', '2026-03-01', 2300.00, 0, 2300.00],
-    ['Santos',  '03.954.491/0001-06', 'Maria Souza',   '111.111.111-11', '2026-03-01', 6710.00, 684.32, 6025.68],
+    ['MODELO — Planilha de Funcionários (enviar mensalmente)', '', '', '', '', '', '', '', ''],
+    ['⚠️ Preencha o Código do Funcionário conforme cadastrado no Sage IOB Folhamatic (6 dígitos)', '', '', '', '', '', '', '', ''],
+    [''],
+    ['Cód. Funcionário (6 dígitos)', 'Localidade', 'CNPJ', 'Nome (Proprietário)', 'CPF', 'Apuração', 'Bruto', 'IRRF', 'Líquido'],
+    ['000051', 'Jandira', '03.954.491/0001-06', 'João da Silva', '000.000.000-00', '2026-03-01', 2300.00, 0, 2300.00],
+    ['000055', 'Santos',  '03.954.491/0001-06', 'Maria Souza',   '111.111.111-11', '2026-03-01', 6710.00, 684.32, 6025.68],
+    ['000078', 'Perdizes','03.954.491/0001-06', 'Pedro Oliveira', '222.222.222-22', '2026-03-01', 1000.00, 0, 1000.00],
   ]);
-  ws3['!cols'] = [{wch:20},{wch:22},{wch:35},{wch:18},{wch:15},{wch:12},{wch:12},{wch:12}];
-  ws3['!merges'] = [{s:{r:0,c:0},e:{r:0,c:7}}];
+  ws3['!cols'] = [{wch:28},{wch:18},{wch:22},{wch:35},{wch:18},{wch:15},{wch:12},{wch:12},{wch:12}];
+  ws3['!merges'] = [{s:{r:0,c:0},e:{r:0,c:8}},{s:{r:1,c:0},e:{r:1,c:8}}];
   XLSX.utils.book_append_sheet(wb, ws3, 'Modelo Planilha');
 
   XLSX.writeFile(wb, 'Layout_Importacao_SageIOB_Folhamatic.xlsx');
