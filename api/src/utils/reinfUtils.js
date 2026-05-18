@@ -224,7 +224,7 @@ function validarEntradaR4010(ev) {
  */
 function gerarEventosR4010DaPlanilha({
   contribuinte, estabelecimento, perApur, tpAmb,
-  dtPagamento, natRend = NAT_REND.ALUGUEL_PF, locadores,
+  dtPagamento, natRend = NAT_REND.ALUGUEL_PF, locadores, seqInicial = 1,
 }) {
   if (!Array.isArray(locadores) || !locadores.length) {
     throw new Error('Lista de locadores vazia.');
@@ -234,7 +234,7 @@ function gerarEventosR4010DaPlanilha({
     const irrf = Number(loc.irrf) || 0;
     const res = gerarR4010({
       contribuinte, estabelecimento, perApur, tpAmb,
-      seq: idx + 1,
+      seq: seqInicial + idx,
       beneficiario: { cpf: loc.cpf, nome: loc.nome },
       pagamentos: [{
         natRend,
@@ -426,4 +426,57 @@ function gerarR4099(p) {
   return { id, xml };
 }
 
-module.exports = { LEIAUTE_REINF, REVISAO_XSD_R4010, NS_R4010, VER_PROC, NAT_REND, fmtValorReinf, gerarIdEvento, gerarR4010, validarEntradaR4010, gerarEventosR4010DaPlanilha, NS_R1000, NS_R4099, gerarR1000, gerarR4099 };
+
+/**
+ * Gera o trio de transmissao (R-1000 + R-4010 da planilha + R-4099) com
+ * SEQUENCIAL CONTINUO — cada evento recebe um seq distinto, garantindo id
+ * unico no lote. Use quando for transmitir o conjunto de uma competencia.
+ *
+ * @param {object} p
+ * @param {object} p.contribuinte     { tpInsc, nrInsc }
+ * @param {object} p.estabelecimento  { tpInscEstab, nrInscEstab }
+ * @param {string} p.perApur          "AAAA-MM"
+ * @param {1|2}    p.tpAmb
+ * @param {string} p.dtPagamento      "AAAA-MM-DD"
+ * @param {string} p.iniValid         inicio de validade do R-1000 "AAAA-MM"
+ * @param {string} p.classTrib        Tabela 08 (obrigatorio)
+ * @param {object} p.contato          { nome, cpf, ... } do R-1000
+ * @param {Array}  p.locadores        lista para os R-4010
+ * @param {object} [p.respInfo]       responsavel do R-4099
+ * @param {boolean}[p.incluirR1000=true]  incluir o R-1000 no trio
+ * @returns {{ r1000?, r4010: Array, r4099, eventos: Array }}
+ *          eventos = lista achatada na ordem de transmissao
+ */
+function gerarTrioReinf(p) {
+  let seq = 1;
+  const eventos = [];
+  let r1000 = null;
+
+  if (p.incluirR1000 !== false) {
+    r1000 = gerarR1000({
+      contribuinte: p.contribuinte, tpAmb: p.tpAmb,
+      iniValid: p.iniValid, fimValid: p.fimValid, classTrib: p.classTrib,
+      indEscrituracao: p.indEscrituracao, indDesoneracao: p.indDesoneracao,
+      indAcordoIsenMulta: p.indAcordoIsenMulta, contato: p.contato, seq: seq++,
+    });
+    eventos.push(r1000);
+  }
+
+  const r4010 = gerarEventosR4010DaPlanilha({
+    contribuinte: p.contribuinte, estabelecimento: p.estabelecimento,
+    perApur: p.perApur, tpAmb: p.tpAmb, dtPagamento: p.dtPagamento,
+    natRend: p.natRend, locadores: p.locadores, seqInicial: seq,
+  });
+  seq += r4010.length;
+  eventos.push(...r4010);
+
+  const r4099 = gerarR4099({
+    contribuinte: p.contribuinte, perApur: p.perApur, tpAmb: p.tpAmb,
+    fechRet: p.fechRet, respInfo: p.respInfo, seq: seq++,
+  });
+  eventos.push(r4099);
+
+  return { r1000, r4010, r4099, eventos };
+}
+
+module.exports = { LEIAUTE_REINF, REVISAO_XSD_R4010, NS_R4010, VER_PROC, NAT_REND, fmtValorReinf, gerarIdEvento, gerarR4010, validarEntradaR4010, gerarEventosR4010DaPlanilha, NS_R1000, NS_R4099, gerarR1000, gerarR4099, gerarTrioReinf };

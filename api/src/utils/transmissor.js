@@ -26,25 +26,58 @@ const ENDPOINTS = {
 };
 
 /**
- * Monta o XML do lote assincrono a partir de uma lista de eventos JA assinados.
- * Cada item da lista e a string XML de um evento (com <Signature>).
+ * Monta o XML do lote assincrono a partir de eventos JA assinados.
+ * Estrutura conforme envioLoteEventosAssincrono-v1_00_00.xsd:
+ *   Reinf > envioLoteEventos > { ideContribuinte, eventos > evento[] }
+ *
+ * IMPORTANTE: garante id unico por evento dentro do lote. O id do evento
+ * REINF termina com um sequencial de 5 digitos; eventos gerados no mesmo
+ * segundo podem nascer com o mesmo id. Aqui o sequencial e reescrito para
+ * 00001, 00002, ... tornando cada id (e cada atributo Id de <evento>) unico.
+ *
+ * ATENCAO: a reescrita do id altera o conteudo assinado, portanto deve
+ * ocorrer ANTES da assinatura. Esta funcao apenas DETECTA e REJEITA ids
+ * duplicados — quem gera os eventos deve passar seq distinto por evento.
+ *
+ * @param {string[]} eventosAssinadosXml  XML de cada evento (com <Signature>)
+ * @param {object}   contribuinte         { tpInsc, nrInsc } do declarante do lote
  */
-function montarLote(eventosAssinadosXml) {
+function montarLote(eventosAssinadosXml, contribuinte) {
   if (!Array.isArray(eventosAssinadosXml) || eventosAssinadosXml.length === 0)
     throw new Error('transmissor: lista de eventos vazia');
   if (eventosAssinadosXml.length > MAX_EVENTOS)
     throw new Error(`transmissor: lote excede ${MAX_EVENTOS} eventos (recebidos ${eventosAssinadosXml.length})`);
+  if (!contribuinte || ![1, 2].includes(contribuinte.tpInsc))
+    throw new Error('transmissor: contribuinte.tpInsc do lote deve ser 1 ou 2');
+  const nrInsc = String(contribuinte.nrInsc || '').replace(/\D/g, '');
+  if (!/^([0-9]{8}|[0-9]{11}|[0-9]{14})$/.test(nrInsc))
+    throw new Error('transmissor: contribuinte.nrInsc do lote invalido');
 
-  const eventos = eventosAssinadosXml.map((xml, i) => {
-    // Remove a declaracao <?xml ...?> de cada evento — fica so a do lote.
+  const vistos = new Set();
+  const eventos = eventosAssinadosXml.map((xml) => {
     const limpo = String(xml).replace(/^\s*<\?xml[^?]*\?>\s*/i, '').trim();
-    return `  <evento Id="evt${i + 1}">\n${limpo}\n  </evento>`;
+    const m = limpo.match(/<(?:evtInfoContri|evtRetPF|evtFech)\s+id="(ID\d{34})"/);
+    if (!m) throw new Error('transmissor: nao foi possivel extrair o id de um evento');
+    const id = m[1];
+    if (vistos.has(id)) {
+      throw new Error(
+        `transmissor: id de evento duplicado no lote (${id}). ` +
+        'Gere cada evento com um seq distinto antes de assinar.'
+      );
+    }
+    vistos.add(id);
+    // o Id do <evento> e o proprio id do evento (chave de mapeamento do retorno)
+    return `   <evento Id="${id}">\n${limpo}\n   </evento>`;
   }).join('\n');
 
   const lote =
 `<?xml version="1.0" encoding="UTF-8"?>
 <Reinf xmlns="${NS_LOTE}">
  <envioLoteEventos>
+  <ideContribuinte>
+   <tpInsc>${contribuinte.tpInsc}</tpInsc>
+   <nrInsc>${nrInsc}</nrInsc>
+  </ideContribuinte>
   <eventos>
 ${eventos}
   </eventos>
@@ -90,14 +123,15 @@ function requisicaoMtls({ url, method, body, cert }) {
 /**
  * Envia um lote de eventos assinados ao Ambiente Nacional.
  * @param {string[]} eventosAssinadosXml  eventos com <Signature>
+ * @param {object}   contribuinte          { tpInsc, nrInsc } declarante do lote
  * @param {1|2}      tpAmb                 1=Producao, 2=Producao Restrita
  * @returns {Promise<{status, protocolo|null, xml}>}
  */
-async function enviarLote(eventosAssinadosXml, tpAmb = 2) {
+async function enviarLote(eventosAssinadosXml, contribuinte, tpAmb = 2) {
   const ep = ENDPOINTS[tpAmb];
   if (!ep) throw new Error('transmissor: tpAmb deve ser 1 ou 2');
 
-  const lote = montarLote(eventosAssinadosXml);
+  const lote = montarLote(eventosAssinadosXml, contribuinte);
   const cert = await loadCertificado();
   const r = await requisicaoMtls({ url: ep.envio, method: 'POST', body: lote, cert });
 
