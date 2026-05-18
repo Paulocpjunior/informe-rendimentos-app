@@ -11,6 +11,7 @@ app.get('/health', (_, res) => res.json({ status: 'ok', ts: new Date().toISOStri
 
 app.use('/api/users', require('./routes/users'));
 app.use('/api/logs',  require('./routes/logs'));
+app.use('/api/reinf', require('./routes/reinf'));
 
 app.use((err, req, res, next) => {
   console.error(err);
