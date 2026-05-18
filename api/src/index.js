@@ -18,5 +18,7 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Erro interno do servidor' });
 });
 
+process.on('unhandledRejection', function(e){ console.error('unhandledRejection:', e && e.message); });
+
 const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => console.log(`SP Contábil API rodando na porta ${PORT}`));
